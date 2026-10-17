@@ -42,13 +42,16 @@ bool ProbeMemory()
     } else {
         std::fprintf(stderr, "memory.direct_alloc=0x%x\n", rc);
     }
-    // Do not round the E offset: that would silently change guest semantics.
-    const bool eAligned = shift % PS5_KERNEL_PAGE_SIZE == 0;
-    std::fprintf(stderr, "memory.alias_E=%s: guest 4KiB shift vs PS5 16KiB page; no semantic workaround installed\n",
-        eAligned ? "UNTESTED" : "UNSUPPORTED");
+    // E (A shifted by 4 KiB) cannot be mapped on 16 KiB pages. As in the macOS
+    // backend (kernel/guest_address_space_macos.cpp, also 16 KiB pages), it stays
+    // reserved but unmapped: the runtime never hands out E addresses and
+    // MmGetPhysicalAddress applies the shift arithmetically, so only a stray
+    // guest access to E would fault.
+    const bool eMappable = shift % PS5_KERNEL_PAGE_SIZE == 0;
+    std::fprintf(stderr, "memory.alias_E=%s\n", eMappable ? "MAPPABLE" : "UNMAPPED (as on macOS)");
     int unmap = sceKernelMunmap(reservation, kSize);
     int release = rc ? 0 : sceKernelReleaseDirectMemory(physical, bytes);
     std::fprintf(stderr, "memory.cleanup unmap=0x%x release=0x%x\n", unmap, release);
-    // E mapping and full production backing/protection remain unimplemented.
-    return false;
+    // Full production backing, null-page protection and large heaps remain unimplemented.
+    return ac && !unmap && !release;
 }

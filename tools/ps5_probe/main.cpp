@@ -22,6 +22,6 @@ int main()
     const bool memory = ProbeMemory();
     const bool vulkan = ProbeVulkan();
     std::fprintf(stderr, "probe.memory=%s probe.vulkan=%s gameplay=NOT_IMPLEMENTED\n",
-        memory ? "PASS" : "BLOCKED", vulkan ? "PASS" : "FAIL");
+        memory ? "PASS" : "FAIL", vulkan ? "PASS" : "FAIL");
     return memory && vulkan ? 0 : 1;
 }

@@ -70,13 +70,16 @@ messages prefixed `[LO PS5]`. It should reserve a 4 GiB guest VA window, map one
 64 KiB direct-memory allocation at A and C, and check bidirectional writes. It
 reports the actual base and cleanup errors. It does not overwrite unowned VA.
 
-**The current E alias is a known blocker:** the production layout maps E at a
-4 KiB offset into A/C's physical backing. The SDK's PS5 page size is 16 KiB.
-This probe reports `alias_E=UNSUPPORTED`, and the memory result remains BLOCKED.
-Rounding that offset or copying E into independent storage would break direct
-PPC `base + address` reads/writes. No such workaround is implemented. Full
-backing allocation, null-page protection, and alias/protection behavior need
-further platform work without rewriting PPC semantics.
+**The E alias stays unmapped, as on macOS.** The production layout puts E at a
+4 KiB offset into A/C's physical backing, which 16 KiB pages cannot express.
+Apple Silicon has the same 16 KiB pages, and the macOS backend
+(`kernel/guest_address_space_macos.cpp`) leaves E reserved but unmapped: the
+runtime never hands out E addresses and `MmGetPhysicalAddress` applies the
+shift arithmetically, so only a stray guest access to E would fault. The game
+has shipped and been played that way on macOS since v0.8.0. This probe reports
+`alias_E=UNMAPPED (as on macOS)`, and the memory result is PASS when the A/C
+alias works and cleanup succeeds. Full backing allocation, null-page protection
+and large heaps still need platform work, without changing PPC semantics.
 
 The Vulkan half independently requests Vulkan 1.2 (portable shader pack target),
 reports geometry/blending/descriptor-indexing/scalar-layout/BDA support and GPU
@@ -85,13 +88,14 @@ heaps, creates a display surface and an SDR FIFO swapchain, and clears/presents
 reports and uses the display's mode. Delays limit this diagnostic to at most
 30 FPS; this is neither a performance measurement nor a 720p game renderer.
 It then requests shell exit. Shader compilation and game rendering are not
-exercised. A successful Vulkan result does not override the memory blocker.
+exercised.
 
 ## Remaining game-port work
 
-- Preserve the shared `kernel/guest_address_space_layout.h` contract, resolve E
-  on 16 KiB pages, then implement production PS5 reservation/direct-memory and
-  large-heap management. No PPC instruction semantics changed.
+- Preserve the shared `kernel/guest_address_space_layout.h` contract, leave E
+  unmapped as the macOS backend does, then implement production PS5
+  reservation/direct-memory and large-heap management. No PPC instruction
+  semantics changed.
 - Adapt plume's Vulkan procedure initialization and display surface creation
   from desktop loader/SDL WSI to this static ICD/VideoOut path. The probe uses
   raw Vulkan, **not plume**, and merely reports some of plume's queried features.
