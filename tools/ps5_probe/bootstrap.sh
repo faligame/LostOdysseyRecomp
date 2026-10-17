@@ -28,4 +28,10 @@ cd "$deps/PS5_Vulkan"
 bash tools/setup-native-dependencies.sh
 bash tools/rebuild-libc.sh
 bash tools/build-radv.sh release
-printf 'PS5_PAYLOAD_SDK=%s\nPS5_VULKAN_DIR=%s\n' "$PWD/.deps/native/ps5-payload-sdk" "$PWD"
+# The driver pin predates native-title mkstemp/readlink fixes. Install the
+# title SDK separately, like VulkanTemplate; do not replace the driver's SDK.
+sdk_tree=$(mktemp -d)
+trap 'rm -rf -- "$sdk_tree"' EXIT
+git -C "$deps/PS5_PayloadSDK" archive "$PS5_SDK_REV" | tar -x -C "$sdk_tree"
+bash "$sdk_tree/platform/tools/setup-sdk.sh" "$deps/lo-sdk" "$PS5_SDK_REV" "$deps/sdk-download"
+printf 'PS5_PAYLOAD_SDK=%s\nPS5_VULKAN_DIR=%s\n' "$deps/lo-sdk" "$PWD"

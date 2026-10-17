@@ -23,7 +23,7 @@ These are host tools; none is a proprietary console SDK.
 # LO_PS5_DEPS may instead point outside this repository.
 bash tools/ps5_probe/bootstrap.sh
 export PS5_VULKAN_DIR="$PWD/build/ps5-deps/PS5_Vulkan"
-export PS5_PAYLOAD_SDK="$PS5_VULKAN_DIR/.deps/native/ps5-payload-sdk"
+export PS5_PAYLOAD_SDK="$PWD/build/ps5-deps/lo-sdk"
 cmake -S . -B build/ps5 -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ps5.cmake \
   -DLO_BUILD_PS5_PROBE=ON -DCMAKE_BUILD_TYPE=Release
@@ -41,12 +41,18 @@ Dependencies are pinned in `dependencies.env`:
 | --- | --- | --- |
 | [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan) | `f410e67a0241b3e8edcdbcd2a9b285dfc4a412ed` | GPL-3.0-or-later; see its NOTICE.md |
 | [PS5_Mesa](https://github.com/mihawk-99/PS5_Mesa) | `1ba9874f478657ccf6da72ce55f0260164cc0bd0` (26.2.0 fork) | Mesa component licenses, predominantly MIT; retain docs/license.rst and source notices |
-| [PS5_PayloadSDK](https://github.com/mihawk-99/PS5_PayloadSDK) | `b83202be73e930050e00de0f1b4d9ec46c0391bf` | GPL-3.0-or-later; bundled LLVM runtimes Apache-2.0 WITH LLVM-exception; dlmalloc MIT |
+| [PS5_PayloadSDK](https://github.com/mihawk-99/PS5_PayloadSDK) title | `b5efad528e0ac1b8289f39d72a0e890ff68ff0a6` | GPL-3.0-or-later; bundled LLVM runtimes Apache-2.0 WITH LLVM-exception; dlmalloc MIT |
+| Driver SDK platform layer | `b83202be73e930050e00de0f1b4d9ec46c0391bf` | Same SDK licenses |
 | [Public SDK release](https://github.com/ps5-payload-dev/sdk/releases/tag/v0.42) | v0.42, SHA-256 `8cfbc7cd5811e719eb4f0c47eea668d3dc7b40bc8ab11c4a5031d40c23ec02da` | See SDK and runtime notices |
 | zlib (host packaging tool) | 1.3.2, SHA-256 `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16` | zlib |
 | [VulkanTemplate](https://github.com/mihawk-99/PS5_VulkanTemplate) reference | `91179df760df1e6c6f2d4d172bc435319d79ff3c` | MIT foundation; not linked |
 
-The pinned Mesa cross build uses its pinned zlib Meson wrap. `PROVENANCE.txt`
+The pinned Mesa cross build uses zlib 1.3.1, wrapdb `1.3.1-1` (source SHA-256
+`9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23`,
+patch SHA-256 `e79b98eb24a75392009cec6f99ca5cdca9881ff20bfa174e8b8926d5c7a47095`).
+The driver and title have separate SDK installs, as in VulkanTemplate. The
+newer title SDK provides native-safe `mkstemp` and `readlink`; linking the title
+against the driver's older platform layer failed the unavailable-import check. `PROVENANCE.txt`
 records the resulting RADV archive hash and SDK revision. The link follows the
 GPL PS5_Vulkan recipe (including whole-archive dispatch, direct-memory heap,
 pthread wrappers and libc substitutes). `param.json` and shell-exit behavior
@@ -110,8 +116,42 @@ exercised. A successful Vulkan result does not override the memory blocker.
 
 ## Build evidence
 
-First milestone: all three probe translation units cross-compiled with public
-SDK v0.42 / fork b83202b and Debian Clang 19.1.7 using `-std=c++20 -Wall
--Wextra -Wpedantic -Wno-missing-field-initializers`. Shell syntax and
-`git diff --check` passed. RADV/native title linking is still in progress at
-this milestone. No hardware result is implied by a host build or ELF inspection.
+Validated in the saved Linux workspace on 2026-10-17, starting from main
+`aa114c1d4513a4f21762f02bab11ef3a7a39f4fa`:
+
+- `LO_PS5_DEPS=/workspace/ps5-deps bash tools/ps5_probe/bootstrap.sh`: PASS.
+  Public SDK/platform, clean-room libc and Mesa/RADV release archive built.
+- `cmake -S . -B build/ps5 -G Ninja
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ps5.cmake
+  -DLO_BUILD_PS5_PROBE=ON -DCMAKE_BUILD_TYPE=Release`: PASS, `ps5-x86_64`.
+  Set `PS5_VULKAN_DIR=/workspace/ps5-deps/PS5_Vulkan` and
+  `PS5_PAYLOAD_SDK=/workspace/ps5-deps/lo-sdk` in this saved workspace.
+- `cmake --build build/ps5 --target LoPS5Probe`: PASS, full target compile,
+  static RADV link, import check, native ELF conversion, fake SELF generation.
+  C++ module scanning is disabled for these non-module sources because the
+  SDK wrapper has no `clang-scan-deps` companion.
+- `ps5-native-tool self --inspect`: `integrity: valid`, 12 segments.
+- ELF dynamic imports: AGC, AGCDriver, LibcInternal, SystemService, VideoOut,
+  kernel only. No Linux loader, SDL, DXC or desktop Vulkan dependency.
+- Negative configure checks: host toolchain + PS5 probe rejected; PS5
+  toolchain without probe opt-in rejected. Both PASS.
+- `bash -n tools/ps5_probe/*.sh` and `git diff --check`: PASS.
+
+Host versions: Clang/LLVM/lld 19.1.7, CMake 3.31.6, Ninja 1.12.1, Meson 1.7.0,
+Mako 1.3.9, SPIRV-LLVM-Translator 19.1.0, SPIRV-Tools 2025.1~rc1. System
+installation was unavailable; Debian packages were downloaded/extracted under
+`/workspace/ps5-host`, with environment setup in `/workspace/ps5-host/env.sh`.
+Source that file before rebuilding in this saved workspace.
+
+Local build checksums (not a promise of reproducibility across host toolchains):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `eboot.bin` (24,406,871 bytes) | `46d6c8a1485d648dd311e77663ec9145bb97badd062e9ae84fcbb89cf38a9cdd` |
+| clean-room `libc.prx` | `e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036` |
+| RADV archive | `b342a324d29563da3fde3db15c8664312b88cb19b623eb7a142d5880db4ec48b` |
+
+No console address or access was supplied. Firmware 10.01 compatibility,
+reservation/alias behavior, Vulkan presentation and shell exit are **untested**.
+The next step is one launch of this no-data title and collection of its klog,
+not an attempted game boot.

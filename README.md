@@ -30,6 +30,8 @@
 
 </div>
 
+> **PS5 experimental branch:** a Vulkan-only, no-game-data native probe now cross-compiles and links. This is not a playable port and has not been tested on a console. See [PS5 build and remaining blockers](tools/ps5_probe/README.md).
+
 ## Contents
 
 - [Start playing](#start-playing)

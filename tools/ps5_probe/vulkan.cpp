@@ -34,11 +34,12 @@ struct Vulkan {
     VkSurfaceKHR surface{};
     VkSwapchainKHR swapchain{};
     VkCommandPool pool{};
-    VkSemaphore acquired{}, rendered{};
+    VkSemaphore acquired{};
+    std::vector<VkSemaphore> rendered;
     ~Vulkan() {
         if (device && DeviceWaitIdle) DeviceWaitIdle(device);
         if (acquired && DestroySemaphore) DestroySemaphore(device, acquired, nullptr);
-        if (rendered && DestroySemaphore) DestroySemaphore(device, rendered, nullptr);
+        if (DestroySemaphore) for (auto sem : rendered) if (sem) DestroySemaphore(device, sem, nullptr);
         if (pool && DestroyCommandPool) DestroyCommandPool(device, pool, nullptr);
         if (swapchain && DestroySwapchainKHR) DestroySwapchainKHR(device, swapchain, nullptr);
         if (device && DestroyDevice) DestroyDevice(device, nullptr);
@@ -190,7 +191,10 @@ bool ProbeVulkan()
     CHECK(v.GetSwapchainImagesKHR(v.device, v.swapchain, &count, images.data()));
     VkSemaphoreCreateInfo sem{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     CHECK(v.CreateSemaphore(v.device, &sem, nullptr, &v.acquired));
-    CHECK(v.CreateSemaphore(v.device, &sem, nullptr, &v.rendered));
+    // Presentation can outlive QueueWaitIdle. Reuse a render-finished semaphore
+    // only after acquiring its own swapchain image again.
+    v.rendered.resize(images.size());
+    for (auto& ready : v.rendered) CHECK(v.CreateSemaphore(v.device, &sem, nullptr, &ready));
     VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool.queueFamilyIndex = family; pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     CHECK(v.CreateCommandPool(v.device, &pool, nullptr, &v.pool));
@@ -222,10 +226,10 @@ bool ProbeVulkan()
         VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         submit.waitSemaphoreCount = 1; submit.pWaitSemaphores = &v.acquired; submit.pWaitDstStageMask = &stage;
         submit.commandBufferCount = 1; submit.pCommandBuffers = &cmd;
-        submit.signalSemaphoreCount = 1; submit.pSignalSemaphores = &v.rendered;
+        submit.signalSemaphoreCount = 1; submit.pSignalSemaphores = &v.rendered[index];
         CHECK(v.QueueSubmit(queue, 1, &submit, VK_NULL_HANDLE));
         VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-        present.waitSemaphoreCount = 1; present.pWaitSemaphores = &v.rendered;
+        present.waitSemaphoreCount = 1; present.pWaitSemaphores = &v.rendered[index];
         present.swapchainCount = 1; present.pSwapchains = &v.swapchain; present.pImageIndices = &index;
         CHECK(v.QueuePresentKHR(queue, &present));
         CHECK(v.QueueWaitIdle(queue)); // Deliberately serialized diagnostic, not a performance test.

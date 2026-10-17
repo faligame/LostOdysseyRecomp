@@ -10,6 +10,7 @@ source "$here/dependencies.env"
 [[ $(git -C "$vulkan" rev-parse HEAD) == "$PS5_VULKAN_REV" ]]
 [[ $(cat "$sdk/.ps5-sdk-revision") == "$PS5_SDK_REV" ]]
 archive="$vulkan/.deps/native/radv-release/lib/libvulkan_radeon.ps5.a"
+grep -qx "sdk: $PS5_DRIVER_SDK_REV" "$vulkan/.deps/native/radv-release/PROVENANCE.txt"
 grep -qx "revision: $PS5_MESA_REV" "$vulkan/.deps/native/radv-release/PROVENANCE.txt"
 tool="$vulkan/build/runtime-shim/ps5-native-tool"
 native="$vulkan/tooling/native"
