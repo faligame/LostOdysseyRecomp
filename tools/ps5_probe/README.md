@@ -1,8 +1,8 @@
 # PS5 first experiment — Vulkan only
 
 This branch builds a **no-game-data native PS5 diagnostic title**, not a playable
-Lost Odyssey port. No console execution has been performed. Target hardware for
-follow-up is a standard PS5 on firmware 10.01 with an existing homebrew loader.
+Lost Odyssey port. It ran once on a retail PS5 on firmware 10.01 on 2026-10-17
+and both checks passed (see "Hardware result" at the end).
 
 The probe cross-compiles for `x86_64-sie-ps5` with the public payload SDK,
 links Mesa/RADV statically via `vk_icdGetInstanceProcAddr`, and uses
@@ -155,7 +155,33 @@ Local build checksums (not a promise of reproducibility across host toolchains):
 | clean-room `libc.prx` | `e6ff45d16adf687855cc3b33b0c8a4132b6504360b221e0a34c7e99fb3ba0036` |
 | RADV archive | `b342a324d29563da3fde3db15c8664312b88cb19b623eb7a142d5880db4ec48b` |
 
-No console address or access was supplied. Firmware 10.01 compatibility,
-reservation/alias behavior, Vulkan presentation and shell exit are **untested**.
-The next step is one launch of this no-data title and collection of its klog,
-not an attempted game boot.
+## Hardware result (2026-10-17)
+
+One run of `c99e32b4` (same `eboot.bin` as `dd940208`, SHA-256 `530660220c56…`,
+built in WSL2 Manjaro with Arch's LLVM 19 packages) on a retail PS5, firmware
+10.01, etaHEN with kstuff. The title folder went to `/mnt/usb0/homebrew/` over
+FTP; ShadowMount+ v1.6beta16 registered it (it needs `sce_sys/icon0.png`) and it
+was launched from the home screen. klog came from ps5debug on TCP 3232:
+
+```text
+memory.page=16384 direct_alignment=65536 E_shift=4096
+memory.reserve4GiB=0x0 address=100000000 preferred=1
+memory.A_map=0x0 C_map=0x0 alias_AC=PASS
+memory.alias_E=UNMAPPED (as on macOS)
+memory.cleanup unmap=0x0 release=0x0
+vulkan.device=PlayStation 5 GPU (RADV NAVI21) api=1.4.354
+vulkan.features geometry=1 independentBlend=1 scalarLayout=1 BDA=1 runtimeArray=1 partiallyBound=1 variableDescriptors=1
+vulkan.heap[0]=4294967296 flags=0x0
+vulkan.heap[1]=8589934592 flags=0x1
+vulkan.mode=3840x2160@59940_mHz
+vulkan.mode=2560x1440@59940_mHz
+vulkan.mode=1920x1080@59940_mHz
+vulkan.present=PASS frames=90 SDR=3840x2160; no shader/game rendering tested
+probe.memory=PASS probe.vulkan=PASS gameplay=NOT_IMPLEMENTED
+exit.status=0
+```
+
+The 4 GiB guest window landed at the preferred `0x100000000`. The display
+offers no 1280x720 mode, so the probe presented at 3840x2160. Mesa's only
+warning was `ac_compute_device_uuid ... invalid pci bus info`. Shader
+compilation and game rendering remain unexercised.
