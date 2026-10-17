@@ -3,10 +3,12 @@
 # architecture-specific build decisions key off these variables instead of
 # re-testing CMAKE_SYSTEM_NAME / CMAKE_SYSTEM_PROCESSOR at each call site.
 #
-#   LO_TARGET_PLATFORM  windows | linux | macos | android
+#   LO_TARGET_PLATFORM  windows | linux | macos | android | ps5
 #   LO_TARGET_ISA       x86_64 | x86 | aarch64
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(PS5 AND CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    set(LO_TARGET_PLATFORM "ps5")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(LO_TARGET_PLATFORM "android")
 elseif(WIN32)
     set(LO_TARGET_PLATFORM "windows")
