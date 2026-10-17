@@ -30,7 +30,7 @@ cmake -S . -B build/ps5 -G Ninja \
 cmake --build build/ps5 --target LoPS5Probe
 ```
 
-Output: `build/ps5/ps5-probe/title/` (`eboot.bin`, `sce_sys/param.json`,
+Output: `build/ps5/ps5-probe/title/` (`eboot.bin`, `sce_sys/param.json`, `sce_sys/icon0.png`,
 `sce_module/libc.prx`). The intermediate ELF and SELF inspection report stay
 beside it. Local experimental title ID: `PPSA99171`; check for a collision on
 your console before installation. Build scripts never deploy or contact a console.

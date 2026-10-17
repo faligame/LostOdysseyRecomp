@@ -45,6 +45,8 @@ missing=$(comm -23 \
 (cd "$vulkan/runtime" && sha256sum --check --strict libc.prx.sha256)
 cp "$vulkan/runtime/libc.prx" "$work/title/sce_module/libc.prx"
 cp "$here/param.json" "$work/title/sce_sys/param.json"
+# Home-screen installers (e.g. ShadowMount) refuse a title without its icon.
+cp "$here/icon0.png" "$work/title/sce_sys/icon0.png"
 cp "$here/dependencies.env" "$vulkan/.deps/native/radv-release/PROVENANCE.txt" "$work/title/"
 cp "$here/README.md" "$work/title/README.txt"
 mkdir -p "$work/title/licenses"

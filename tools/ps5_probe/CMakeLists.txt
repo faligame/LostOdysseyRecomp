@@ -15,11 +15,12 @@ target_compile_options(LoPS5ProbeObjects PRIVATE -Wall -Wextra -Wpedantic
 set(probe_out "${CMAKE_BINARY_DIR}/ps5-probe")
 add_custom_command(OUTPUT "${probe_out}/eboot.elf"
     BYPRODUCTS "${probe_out}/title/eboot.bin" "${probe_out}/title/sce_sys/param.json"
+        "${probe_out}/title/sce_sys/icon0.png"
         "${probe_out}/title/sce_module/libc.prx" "${probe_out}/self-inspect.txt"
     COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/link.sh" "${probe_out}"
         "${PS5_VULKAN_DIR}" "${PS5_PAYLOAD_SDK}" $<TARGET_OBJECTS:LoPS5ProbeObjects>
     DEPENDS LoPS5ProbeObjects $<TARGET_OBJECTS:LoPS5ProbeObjects>
-        link.sh dependencies.env param.json README.md
+        link.sh dependencies.env param.json icon0.png README.md
         "${PS5_RADV_ROOT}/lib/libvulkan_radeon.ps5.a"
     COMMAND_EXPAND_LISTS VERBATIM)
 add_custom_target(LoPS5Probe ALL DEPENDS "${probe_out}/eboot.elf")
