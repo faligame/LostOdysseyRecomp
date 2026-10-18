@@ -10398,6 +10398,20 @@ void main()
                     unsigned common=masks[0]&masks[1];fullCopyReason=10;return std::popcount(masks[0])==3&&std::popcount(masks[1])==3&&
                         (masks[0]|masks[1])==15&&(common==9||common==6);
                 };
+                    // Scene fades off: the crossfade quad (PS 2ef7: the captured
+                    // previous scene, alpha c0.x) is skipped while partly
+                    // transparent, so the new scene appears at once.
+                    if (key.ps == 0x2ef725fa9031545bull && std::bit_cast<float>(psConstants[0]) < 0.999f &&
+                        !settings::GetConfig().sceneFades) {
+                        if (fullScreenQuad(key.ps, RenderBlend::SRC_ALPHA, RenderBlend::INV_SRC_ALPHA, 0)) {
+                            // One line per crossfade: its first skipped frame.
+                            static uint64_t lastSkippedFade = 0;
+                            if (frame != lastSkippedFade + 1)
+                                LOG_INFO("renderer: scene fade skipped from frame={} alpha={}", frame, std::bit_cast<float>(psConstants[0]));
+                            lastSkippedFade = frame;
+                            return;
+                        }
+                    }
                     fullSceneCopy = fullScreenQuad(0xcda578aef1724fdcull, RenderBlend::ONE, RenderBlend::ZERO, 3);
                     if (aoActive && key.ps == 0x234ee3faaf1ba953ull && temporalScene.Frame() == frame && temporalScene.Draws() &&
                         rasterViewport.width == temporalScene.Anchor().viewport.width && rasterViewport.height == temporalScene.Anchor().viewport.height &&

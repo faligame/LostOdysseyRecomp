@@ -232,6 +232,8 @@ Config Read()
             value.bloom = number == 1;
         else if (key == "motion_blur" && number <= 1)
             value.motionBlur = number == 1;
+        else if (key == "scene_fades" && number <= 1)
+            value.sceneFades = number == 1;
         else if (key == "dynamic_shadows" && number <= 2)
             value.dynamicShadows = number;
         else if (key == "culling")
@@ -476,6 +478,7 @@ static bool WriteConfig(const Config &value)
            << "\ndepth_of_field=" << value.depthOfFieldPercent
            << "\nbloom=" << (value.bloom ? 1 : 0)
            << "\nmotion_blur=" << (value.motionBlur ? 1 : 0)
+           << "\nscene_fades=" << (value.sceneFades ? 1 : 0)
            << "\ndynamic_shadows=" << value.dynamicShadows
            << "\nculling=" << value.cullingPercent
            << "\nvibration=" << value.vibrationPercent

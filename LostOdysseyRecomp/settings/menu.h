@@ -183,20 +183,21 @@ enum class GraphicsRow : int
     DepthOfField = 20,
     Bloom = 21,
     MotionBlur = 22,
-    Culling = 23,
-    ScalingQuality = 24,
-    RgbRange = 25,
-    FrameRate = 26,
-    LoadingTransitions = 27,
-    VariableRefreshRate = 28,
-    PerformanceOverlay = 29,
-    Hdr = 30,
-    HdrPaperWhite = 31, // shown with HDR on
-    HdrPeak = 32, // shown with HDR on
-    HdrCalibration = 33, // opens the HDR peak page; shown with HDR on
-    Brightness = 34, // opens the brightness page
-    Save = 35,
-    Count = 36,
+    SceneFades = 23,
+    Culling = 24,
+    ScalingQuality = 25,
+    RgbRange = 26,
+    FrameRate = 27,
+    LoadingTransitions = 28,
+    VariableRefreshRate = 29,
+    PerformanceOverlay = 30,
+    Hdr = 31,
+    HdrPaperWhite = 32, // shown with HDR on
+    HdrPeak = 33, // shown with HDR on
+    HdrCalibration = 34, // opens the HDR peak page; shown with HDR on
+    Brightness = 35, // opens the brightness page
+    Save = 36,
+    Count = 37,
 };
 inline constexpr int MenuTabWidth = 640 / MenuTabCount;
 // Mods page (System → Mods): a list page in the tab layout. A row with a detail

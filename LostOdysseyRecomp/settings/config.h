@@ -133,6 +133,9 @@ struct Config
     uint32_t depthOfFieldPercent = 100; // Tone-map DoF strength; 0 Off, 100 retail. Applied live.
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
     bool motionBlur = true; // The game's motion blur pass. Applied live.
+    // The game's full-screen colour fades between scenes. Off skips the partly
+    // faded frames, so a fade becomes a cut. Applied live.
+    bool sceneFades = true;
     // The game's per-object shadows, applied live: 0 Off, 1 On (retail), 2 Low
     // (only objects large on screen cast one, patches/shadow_budget.cpp).
     uint32_t dynamicShadows = 1;
