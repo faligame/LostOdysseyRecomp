@@ -366,12 +366,15 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         auto disc = gameRoot / "disc1";
         if (!std::filesystem::exists(disc / "LO.fpi")) disc = gameRoot;
         Index index(disc / "LO.fpi");
-        constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch"};
-        const std::string selected = languages[language < std::size(languages) ? language : 0];
+        // Settings languages: English, Traditional Chinese, Japanese, Korean,
+        // Simplified Chinese, Spanish, French, German, Italian.
+        constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch", "spa", "fra", "deu", "ita"};
+        std::string selected = languages[language < std::size(languages) ? language : 0];
+        if (!index.HasPackage(selected, "rpmenurescommon")) selected = "int";
         // The European game draws every Latin language with the deu fonts,
         // which have the accented letters; HD font mods replace those pages.
         std::string fontLanguage = selected;
-        if (language == 0)
+        if (language == 0 || language >= 5)
             for (const char *candidate : {"deu", "int"})
                 if (index.HasPackage(candidate, "rpfontscommon")) { fontLanguage = candidate; break; }
         const auto commonPath = "bin/xenon/loc/" + fontLanguage + "/menu/rpfontscommon_" + fontLanguage + ".xxx";

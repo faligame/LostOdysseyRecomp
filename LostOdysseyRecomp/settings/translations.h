@@ -1,9 +1,12 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
+#include "translations_eu.h"
 namespace settings
 {
-// English and Traditional Chinese are provided at the call site.
+// English and Traditional Chinese are provided at the call site; Japanese,
+// Korean and Simplified Chinese are below, the European languages in
+// translations_eu.h.
 // Keep the lookup and its table in the same translation unit, including incremental builds.
 static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, const wchar_t *traditional)
 {
@@ -11,6 +14,15 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         return en;
     if (language == 1)
         return traditional;
+    if (language >= 5)
+    {
+        // Spanish, French, German, Italian; English where a text has none.
+        for (const auto &text : EuropeanTexts)
+            if (std::wstring_view(en) == text.key)
+                return language == 5 ? text.spanish : language == 6 ? text.french : language == 7 ? text.german
+                                                                                                   : text.italian;
+        return en;
+    }
     struct Entry
     {
         const wchar_t *key, *japanese, *korean, *simplified;

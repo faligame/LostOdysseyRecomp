@@ -106,7 +106,7 @@ Config Validate(Config value)
         value.fastForwardRate = 2;
     if (std::find(std::begin(MenuAnimationRates), std::end(MenuAnimationRates), value.menuAnimationRate) == std::end(MenuAnimationRates))
         value.menuAnimationRate = 1;
-    if (value.uiLanguage > 4)
+    if (value.uiLanguage >= std::size(UiLanguageNames))
         value.uiLanguage = 0;
     if (GameLanguageIds[GameLanguageIndex(value.gameLanguage)] != value.gameLanguage)
         value.gameLanguage = 1;

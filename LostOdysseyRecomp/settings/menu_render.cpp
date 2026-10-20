@@ -231,15 +231,19 @@ namespace
         static constexpr const wchar_t *names[kNamedButtonIcons] = {L"A", L"B", L"X", L"Y", L"LB", L"RB",
                                                                    L"LT", L"RT", L"Back", L"Start", L"L3", L"R3",
                                                                    L"D-pad"};
+        // The D-pad's name in the European settings languages (translations_eu.h).
+        static constexpr const wchar_t *dpadNames[] = {L"Cruceta", L"Croix directionnelle", L"Croix",
+                                                       L"Steuerkreuz", L"Croce direzionale", L"Croce"};
         const auto word = [](wchar_t c) { return iswalnum(c) != 0; };
         std::wstring out;
         for (size_t i = 0; i < value.size();)
         {
             bool replaced = false;
             if (i == 0 || !word(value[i - 1]))
-                for (int n = kNamedButtonIcons - 1; n >= 0 && !replaced; --n)
+                for (int n = kNamedButtonIcons - 1 + int(std::size(dpadNames)); n >= 0 && !replaced; --n)
                 {
-                    const std::wstring_view name = names[n];
+                    const int icon = std::min(n, kNamedButtonIcons - 1);
+                    const std::wstring_view name = n < kNamedButtonIcons ? names[n] : dpadNames[n - kNamedButtonIcons];
                     if (value.compare(i, name.size(), name) != 0) continue;
                     const size_t end = i + name.size();
                     if (end < value.size() && word(value[end])) continue;
@@ -250,7 +254,7 @@ namespace
                                        value[next] == L')' || value[next] == L'：';
                     const bool before = previous > 0 && (value[previous - 1] == L'/' || value[previous - 1] == L'(');
                     if (!after && !before) continue;
-                    out += wchar_t(kButtonIconFirst + n);
+                    out += wchar_t(kButtonIconFirst + icon);
                     i = end;
                     replaced = true;
                 }
