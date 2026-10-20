@@ -388,6 +388,7 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         assets->menu = DecodeTexture(menu, "UI_MAIN_00", menuPath);
         // The UV layout below is the verified 512x1024 common menu atlas.
         Check(assets->menu.width == 512 && assets->menu.height == 1024);
+        try { assets->window = DecodeTexture(menu, "window", menuPath); } catch (...) { /* The drawn cursor remains. */ }
         try
         {
             // The button tiles live in the INT package (hid/controller_atlas_glyphs.h).

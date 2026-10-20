@@ -260,6 +260,8 @@ static inline const wchar_t *Translate(uint32_t language, const wchar_t *en, con
         {L"Restore game defaults", L"ゲーム設定を初期化", L"게임 설정 초기화", L"恢复游戏默认设置"},
         {L"Restore", L"初期化", L"초기화", L"恢复"},
         {L"Quit to Main Menu", L"メインメニューに戻る", L"메인 메뉴로 돌아가기", L"退出到主菜单"},
+        {L"Menu", L"メニュー", L"메뉴", L"菜单"},
+        {L"Help", L"ヘルプ", L"도움말", L"帮助"},
         {L"Return", L"戻る", L"돌아가기", L"返回"},
         {L"Import discs & DLC", L"ディスクとDLCをインポート", L"디스크 및 DLC 가져오기", L"导入光盘与 DLC"},
         {L"Add to Steam", L"Steam に追加", L"Steam에 추가", L"添加到 Steam"},

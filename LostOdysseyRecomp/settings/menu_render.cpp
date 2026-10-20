@@ -72,6 +72,15 @@ namespace
     // The help box under the list: one line at 20 pt, or the help over the
     // notice at 16 pt each.
     constexpr int kHelpX = 131, kHelpY = 650, kHelpWidth = 1063, kHelpHeight = 45, kHelpSize = 20;
+    // Retail menu text, measured on the System menu at 1920x1080: the same
+    // glyph widths as the font's own proportions at 25 px instead of 23 px
+    // tall, outlined in black. The help line keeps the row height and is
+    // narrower still.
+    constexpr double kGameTextHeight = 1.087, kGameTextAspect = 0.872, kHelpTextAspect = 0.69;
+    // The help line in the game face: larger, at kHelpTextAspect. The host
+    // font keeps kHelpSize.
+    constexpr int kGameHelpSize = 24;
+    int HelpSize(const settings::MenuSnapshot &s) { return s.assets ? kGameHelpSize : kHelpSize; }
     constexpr int kHelpLineHeight = 22, kHelpLineSize = 16;
     // The neural rendering page: its help line, and the message in the preview
     // rectangle when no frame can be shown, wrapped into up to three lines.
@@ -450,6 +459,45 @@ namespace
         Line(c, x + 2, y + 2, x + 21, y + 2, MakeColor(255, 255, 255, 251));
     }
 
+    // The retail list cursor from the window texture (40x23 at 6,126), drawn
+    // where Arrow's shape starts. False when the texture is missing.
+    bool ArrowSprite(const Canvas &c, const settings::menu_assets::Assets *assets, int x, int y)
+    {
+        if (!assets || assets->window.width < 46 || assets->window.height < 149) return false;
+        const auto &image = assets->window;
+        constexpr int sx = 6, sy = 126, sw = 40, sh = 23;
+        const double left = c.offsetX + (x - 2) * c.scale, top = c.offsetY + y * c.scale;
+        const double dw = sw * c.scale, dh = sh * c.scale;
+        const int x0 = std::max(0, int(std::floor(left))), y0 = std::max(0, int(std::floor(top)));
+        const int x1 = std::min(int(c.width), int(std::ceil(left + dw))), y1 = std::min(int(c.height), int(std::ceil(top + dh)));
+        for (int py = y0; py < y1; ++py)
+            for (int px = x0; px < x1; ++px)
+            {
+                const double u = std::clamp((px + .5 - left) * sw / dw - .5, 0.0, double(sw - 1));
+                const double v = std::clamp((py + .5 - top) * sh / dh - .5, 0.0, double(sh - 1));
+                const int ux = int(u), vy = int(v), ux1 = std::min(ux + 1, sw - 1), vy1 = std::min(vy + 1, sh - 1);
+                const double fx = u - ux, fy = v - vy;
+                const uint32_t samples[] = {image.pixels[size_t(sy + vy) * image.width + sx + ux],
+                                            image.pixels[size_t(sy + vy) * image.width + sx + ux1],
+                                            image.pixels[size_t(sy + vy1) * image.width + sx + ux],
+                                            image.pixels[size_t(sy + vy1) * image.width + sx + ux1]};
+                const double weights[] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
+                double alpha = 0, color[3]{};
+                for (int i = 0; i < 4; ++i)
+                {
+                    const double a = ((samples[i] >> 24) & 255) * weights[i];
+                    alpha += a;
+                    for (int k = 0; k < 3; ++k) color[k] += ((samples[i] >> (8 * k)) & 255) * a;
+                }
+                if (alpha <= 0) continue;
+                uint32_t source = uint32_t(std::lround(std::min(alpha, 255.0))) << 24;
+                for (int k = 0; k < 3; ++k) source |= uint32_t(std::clamp(color[k] / alpha, 0.0, 255.0)) << (8 * k);
+                uint32_t &p = c.dib[size_t(py) * c.width + px];
+                p = ColorBlend(p, source);
+            }
+        return true;
+    }
+
     // Visible list slots, as drawn below.
     constexpr int ListTop = 150, ListRowHeight = 43, ListArrowX = 38, ListArrowOffset = 10, ListColumnRight = 366;
 
@@ -502,11 +550,13 @@ std::wstring settings::ArabicDrawOrder(const std::wstring &value) { return Arabi
 
 bool settings::ArabicJoinedForm(wchar_t c) { return JoinedForm(c); }
 
-void settings::DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y)
+void settings::DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y,
+                             const menu_assets::Assets *assets)
 {
     if (!width || !height || pixels.size() != size_t(width) * height)
         return;
-    Arrow(Canvas(pixels.data(), width, height), x, y);
+    const Canvas canvas(pixels.data(), width, height);
+    if (!ArrowSprite(canvas, assets, x, y)) Arrow(canvas, x, y);
 }
 
 settings::MenuRect settings::TitleHintBounds(uint32_t width, uint32_t height)
@@ -531,8 +581,9 @@ settings::MenuRect settings::MenuArrowBounds(uint32_t width, uint32_t height, in
     const auto edge = [](double value, uint32_t limit) {
         return size_t(std::clamp(value, 0.0, double(limit)));
     };
-    return {edge(std::floor(c.offsetX + (x - 1) * c.scale), width), edge(std::floor(c.offsetY + (y - 1) * c.scale), height),
-            edge(std::ceil(c.offsetX + (x + 38) * c.scale), width), edge(std::ceil(c.offsetY + (y + 24) * c.scale), height)};
+    // The retail cursor sprite spans x - 2 .. x + 38 and y .. y + 23.
+    return {edge(std::floor(c.offsetX + (x - 3) * c.scale), width), edge(std::floor(c.offsetY + (y - 1) * c.scale), height),
+            edge(std::ceil(c.offsetX + (x + 39) * c.scale), width), edge(std::ceil(c.offsetY + (y + 24) * c.scale), height)};
 }
 
 std::wstring settings::PromptGlyphs(const std::wstring &value, bool playStation)
@@ -657,7 +708,7 @@ settings::HelpFit settings::MeasureHelp(const MenuSnapshot &s)
         return fit;
     }
     if (s.notice.empty())
-        fit.help = Fit(s, s.help, kHelpWidth, kHelpHeight, kHelpSize);
+        fit.help = Fit(s, s.help, kHelpWidth, kHelpHeight, HelpSize(s));
     else
     {
         fit.help = Fit(s, s.help, kHelpWidth, kHelpLineHeight, kHelpLineSize);
@@ -860,13 +911,16 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     const uint32_t muted = MakeColor(255, 165, 166, 163);
     const uint32_t disabled = MakeColor(255, 126, 128, 126);
     const uint32_t selectedSurface = MakeColor(255, 194, 196, 194);
-    const uint32_t selectedInk = MakeColor(255, 35, 36, 36);
-    const uint32_t outline = MakeColor(255, 39, 40, 40);
+    // The retail menus keep white text with a black outline on the cursor's
+    // lighter plate too, so focused text uses the same colours.
+    const uint32_t selectedInk = ink;
+    const uint32_t outline = MakeColor(255, 8, 8, 8);
+    const uint32_t selectedEdge = outline;
 
     auto text = [&](int x, int y, int w, int h, const std::wstring &source, int size, uint32_t color,
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
-                     uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true,
-                     bool creditSeparators = false) {
+                     uint32_t edge = MakeColor(255, 8, 8, 8), int minimum = 13, bool prompts = true,
+                     bool creditSeparators = false, double aspect = kGameTextAspect) {
         const auto *assets = current.assets.get();
         // The game faces have no multiplication sign; an x keeps "4×" in them.
         std::wstring plain = source;
@@ -893,45 +947,58 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
 #ifdef LO_MENU_RENDER_TRACE
             LoMenuRenderTrace(drawn, true);
 #endif
-            // Measure spaces the way they are drawn below, or right-aligned
-            // and centered text with spaces runs past its box.
-            const double advance = FaceAdvance(font, drawn, creditSeparators);
-            const double ratio = FaceRatio(font, drawn, w, h, size, true, creditSeparators);
-            double left = x;
-            if (alignment == 1) left += (w - advance * ratio) * .5;
-            else if (alignment == 2) left += w - advance * ratio;
-            const double top = y + (h - font.height * ratio) * .5;
+            // Glyphs are drawn kGameTextHeight taller and `aspect` as wide as
+            // tall, like the retail menus; text that does not fit is narrowed
+            // further. Button icons stay square.
+            const double ratioY = std::min(FaceRatio(font, drawn, w, h, size, false, creditSeparators) * kGameTextHeight,
+                                           double(h) / font.height);
+            double units = 0;
+            int iconCount = 0;
             for (const auto c : drawn)
             {
-                if (c == L' ') { left += (font.height * 0.3) * ratio; continue; }
+                if (IsButtonIcon(c)) ++iconCount;
+                else units += c == L' ' || (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+                                  ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
+            }
+            const double iconStep = font.height * ratioY * kButtonIconAdvance;
+            const double room = std::max(1.0, double(w - 8) - iconCount * iconStep);
+            const double ratioX = std::min(ratioY * aspect, room / std::max(1.0, units));
+            const double advance = units * ratioX + iconCount * iconStep;
+            const double top = y + (h - font.height * ratioY) * .5;
+            double left = x;
+            if (alignment == 1) left += (w - advance) * .5;
+            else if (alignment == 2) left += w - advance;
+            for (const auto c : drawn)
+            {
+                if (c == L' ') { left += (font.height * 0.3) * ratioX; continue; }
                 if (IsButtonIcon(c))
                 {
-                    const double step = font.height * kButtonIconAdvance * ratio, side = font.height * kButtonIconSize * ratio;
+                    const double side = font.height * ratioY * kButtonIconSize;
                     const auto cell = ButtonIconCell(c);
                     sprite(iconAtlas, cell[0] * iconScale, cell[1] * iconScale, 36 * iconScale, 36 * iconScale,
-                           left + (step - side) * .5,
-                           top + (font.height * ratio - side) * .5, side, side, color == ink ? 255 : 160);
-                    left += step;
+                           left + (iconStep - side) * .5,
+                           top + (font.height * ratioY - side) * .5, side, side, color == ink ? 255 : 160);
+                    left += iconStep;
                     continue;
                 }
                 if (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
                 {
                     // INT's menu faces lack U+00B7. Draw only that separator
                     // here so the fixed credit retains the menu font throughout.
-                    const double step = font.height * 0.3 * ratio;
-                    const double cx = left + step / 2, cy = top + font.height * ratio / 2;
-                    const double radius = font.height * ratio * 0.055;
+                    const double step = font.height * 0.3 * ratioX;
+                    const double cx = left + step / 2, cy = top + font.height * ratioY / 2;
+                    const double radius = font.height * ratioY * 0.055;
                     if (edge) Ellipse(canvas, cx, cy, radius + 0.6, radius + 0.6, 0, edge);
                     Ellipse(canvas, cx, cy, radius, radius, 0, color);
                     left += step;
                     continue;
                 }
                 const auto &g = font.glyphs.at(uint32_t(c));
-                const auto &page = settings::menu_assets::GlyphPage(font, g, ratio * scale);
+                const auto &page = settings::menu_assets::GlyphPage(font, g, ratioY * scale);
                 const int s = int(page.scale);
                 sprite(page, int(g.x) * s, int(g.y) * s, int(g.width) * s, int(g.height) * s,
-                       left, top, g.width * ratio, g.height * ratio, 255, false, color, edge);
-                left += (int(g.width) + font.kerning) * ratio;
+                       left, top, g.width * ratioX, g.height * ratioY, 255, false, color, edge);
+                left += (int(g.width) + font.kerning) * ratioX;
             }
             return;
         }
@@ -1000,10 +1067,22 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     auto brushedCell = [&](int x, int y, int w, int h, uint32_t base) {
         if (current.assets && !current.assets->menu.pixels.empty())
         {
+            metal(x, y, w, h, base, 5);
             if (base == selectedSurface)
-                sprite(current.assets->menu, 98, 259, 96, 36, x, y, w, h, 255, true);
-            else
-                metal(x, y, w, h, base, 5);
+            {
+                // The retail cursor plate: the same brushed metal lifted to
+                // about 184, a bright top edge and a shadow below and right.
+                fill(x, y, w, h, MakeColor(128, 255, 255, 255));
+                line(x, y, x + w, y, MakeColor(255, 214, 216, 214));
+                line(x, y + 1, x + w, y + 1, MakeColor(255, 196, 198, 196));
+                line(x, y, x, y + h, MakeColor(255, 160, 162, 163));
+                line(x, y + h - 2, x + w, y + h - 2, MakeColor(255, 150, 148, 150));
+                line(x, y + h - 1, x + w, y + h - 1, MakeColor(255, 120, 118, 120));
+                fill(x + 2, y + h, w, 2, MakeColor(150, 0, 0, 0));
+                fill(x + 2, y + h + 2, w, 1, MakeColor(70, 0, 0, 0));
+                fill(x + w, y + 2, 2, h, MakeColor(130, 0, 0, 0));
+                fill(x + w + 2, y + 2, 1, h, MakeColor(60, 0, 0, 0));
+            }
             return;
         }
         fill(x, y, w, h, base);
@@ -1019,7 +1098,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         line(x + w - 1, y, x + w - 1, y + h, selected ? MakeColor(255, 70, 71, 71) : MakeColor(255, 76, 78, 78));
     };
 
-    auto arrow = [&](int x, int y) { Arrow(canvas, x, y); };
+    auto arrow = [&](int x, int y) { if (!ArrowSprite(canvas, current.assets.get(), x, y)) Arrow(canvas, x, y); };
 
     auto controllerButton = [&](int x, int y, wchar_t letter, bool green, bool bright) {
         const uint32_t base = green ? (bright ? MakeColor(255, 116, 177, 43) : MakeColor(255, 91, 116, 72))
@@ -1073,7 +1152,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             if (focused) arrow(354, y + 8);
             text(405, y, 470, 37, current.dialogChoices[i], 20,
                  focused ? selectedInk : ink, false, 1,
-                 focused ? MakeColor(255, 222, 223, 219) : outline, 13);
+                 focused ? selectedEdge : outline, 13);
         }
     };
 
@@ -1456,7 +1535,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     if (current.backdropOnly)
         return true;
     text(130, 42, 234, 43, Translate(current.language, L"Settings", L"設定"), 31, ink, false);
-    text(70, 122, 260, 28, L"Menu", 18, ink, false);
+    text(70, 122, 260, 28, Translate(current.language, L"Menu", L"選單"), 18, ink, false);
 
     const wchar_t *enTabs[] = {L"Gameplay", L"Audio", L"Graphics", L"System"};
     const wchar_t *zhTabs[] = {L"遊戲", L"聲音", L"圖像", L"系統"};
@@ -1464,7 +1543,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     {
         // A page opened from a row: one selected cell in place of the tabs.
         cell(386, 110, 640, 32, true);
-        text(394, 110, 624, 32, current.pageTitle, 17, selectedInk, true, 1, MakeColor(255, 222, 223, 219), 12);
+        text(394, 110, 624, 32, current.pageTitle, 17, selectedInk, true, 1, selectedEdge, 12);
         if (!current.keyLegend.empty())
             text(380, 52, 880, 32, current.keyLegend, 18, ink, false, 2, outline, 13);
     }
@@ -1476,7 +1555,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         cell(x, 110, tabWidth, 32, selected);
         text(x + 8, 110, tabWidth - 16, 32, Translate(current.language, enTabs[i], zhTabs[i]), 17,
              selected ? selectedInk : ink, selected, 1,
-             selected ? MakeColor(255, 222, 223, 219) : outline, 12);
+             selected ? selectedEdge : outline, 12);
     }
 
     constexpr int rowTop = ListTop;
@@ -1529,6 +1608,12 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                                  index == size_t(GraphicsRow::Brightness)))
             line(labelLeft, y - 3, choiceLeft + choiceWidth, y - 3, MakeColor(255, 173, 176, 177));
 
+        if (!focused)
+        {
+            // Retail raised plate: slightly lighter metal and a light left edge.
+            fill(labelLeft, y, labelWidth, rowHeight - 2, MakeColor(20, 255, 255, 255));
+            line(labelLeft, y, labelLeft, y + rowHeight - 2, MakeColor(255, 153, 157, 153));
+        }
         if (focused)
         {
             brushedCell(labelLeft, y, labelWidth, rowHeight - 2, selectedSurface);
@@ -1556,7 +1641,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         }
         text(pictured ? labelLeft + 6 + rowHeight - 6 + 8 : 82, y, pictured ? 244 : 274, rowHeight - 2, row.name,
              pictured ? 22 : 24, !row.enabled ? disabled : focused ? selectedInk : ink, false, 0,
-             focused ? MakeColor(255, 222, 223, 219) : outline, 16);
+             focused ? selectedEdge : outline, 16);
 
         if (row.sliderPercent >= 0)
         {
@@ -1613,7 +1698,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                 cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
                 text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
                      !row.enabled ? disabled : currentChoice ? (focused ? selectedInk : ink) : muted,
-                     false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13);
+                     false, 1, focused && currentChoice ? selectedEdge : outline, 13);
             }
             continue;
         }
@@ -1629,7 +1714,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             cell(choiceLeft, y, choiceWidth, rowHeight - 2, focused);
             const uint32_t valueInk = !row.enabled ? disabled : focused ? selectedInk : ink;
             text(choiceLeft + margin, y, buttonLeft - gap - choiceLeft - margin, rowHeight - 2, (*choices)[selected], 22,
-                 valueInk, false, 1, focused ? MakeColor(255, 222, 223, 219) : outline, 13);
+                 valueInk, false, 1, focused ? selectedEdge : outline, 13);
             const wchar_t confirm = current.confirmB ? L'B' : L'A';
             controllerButton(buttonLeft, y + (rowHeight - 2 - buttonSize) / 2, confirm, confirm == L'A', row.enabled);
             const int middle = y + (rowHeight - 2) / 2;
@@ -1668,7 +1753,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                  row.enabled ? muted : disabled, false, 1);
             text(choiceLeft + arrowWidth + 8, y, choiceWidth - arrowWidth * 2 - 16, rowHeight - 2,
                  (*choices)[selected], 22, !row.enabled ? disabled : focused ? selectedInk : ink,
-                 false, 1, focused ? MakeColor(255, 222, 223, 219) : outline, 14);
+                 false, 1, focused ? selectedEdge : outline, 14);
             text(choiceLeft + choiceWidth - arrowWidth, y, arrowWidth, rowHeight - 2, L"▶", 16,
                  row.enabled ? muted : disabled, false, 1);
             continue;
@@ -1685,7 +1770,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
             cell(left, y, right - left, rowHeight - 2, focused && currentChoice);
             text(left + 7, y, right - left - 14, rowHeight - 2, (*choices)[option], 22,
                  !row.enabled ? disabled : currentChoice ? (focused ? selectedInk : ink) : muted,
-                 false, 1, focused && currentChoice ? MakeColor(255, 222, 223, 219) : outline, 13, !row.literal);
+                 false, 1, focused && currentChoice ? selectedEdge : outline, 13, !row.literal);
         }
     }
 
@@ -1738,14 +1823,16 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     if (visible - current.scroll > visibleRows)
         triangle(choiceLeft + choiceWidth - 20, 638, false);
 
-    text(65, 652, 52, 43, L"Help", 20, ink, false);
+    text(65, 652, 60, 43, Translate(current.language, L"Help", L"說明"), 24, ink, false, 0, outline, 13, true, false,
+         kHelpTextAspect);
     fill(116, 650, 1094, 45, MakeColor(255, 70, 73, 73));
     if (!current.notice.empty())
         fill(116, 672, 1094, 22, MakeColor(255, 54, 57, 57));
     line(116, 650, 1210, 650, MakeColor(255, 154, 156, 155));
     line(116, 694, 1210, 694, MakeColor(255, 55, 56, 56));
     if (current.notice.empty())
-        text(kHelpX, kHelpY, kHelpWidth, kHelpHeight, current.help, kHelpSize, ink, false, 0, outline, 14);
+        text(kHelpX, kHelpY, kHelpWidth, kHelpHeight, current.help, HelpSize(current), ink, false, 0, outline, 14, true, false,
+             kHelpTextAspect);
     else
     {
         text(kHelpX, kHelpY, kHelpWidth, kHelpLineHeight, current.help, kHelpLineSize, ink, false, 0, outline, 12);

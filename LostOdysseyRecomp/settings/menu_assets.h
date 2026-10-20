@@ -43,6 +43,8 @@ struct Assets
 {
     Font body, title, fallback;
     Image menu;
+    // The retail menus' window parts (empty when missing): the list cursor.
+    Image window;
     // The game's button prompt tiles (Icon_Page_0, 36x36 cells; empty when
     // missing) and the same atlas with the PlayStation artwork the game uses,
     // both in the menu raster's byte order (host_ui::PackRgba).

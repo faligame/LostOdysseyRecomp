@@ -4104,6 +4104,15 @@ bool settings::IsTitleQuitOpen()
     return titleQuitOpen.load();
 }
 
+bool settings::MenuOverGame()
+{
+    // Opened in a game, the retail Settings screen keeps drawing its header
+    // (title, gold, time, location) under the menu. Not from the title menu,
+    // and not on the pages that preview the scene.
+    return active.load() && !titleQuitOpen.load() && !titleEntry.load() && !calibrationOpen.load() &&
+           !brightnessOpen.load() && !nrOpen.load();
+}
+
 bool settings::UpdateTitleQuit(uint8_t* base, bool idle)
 {
     const auto close = [] {
@@ -4372,7 +4381,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
         const double phase = seconds(now - openTime) / seconds(menu_motion::ArrowSwayPeriod);
         const int x = arrow.x + int(std::lround(menu_motion::ArrowSway * (0.5 - 0.5 * std::cos(6.283185307179586 * phase))));
         const int y = int(std::lround(arrowY));
-        DrawMenuArrow(pixels, width, height, x, y);
+        DrawMenuArrow(pixels, width, height, x, y, cachedAssets.get());
         arrowDrawn = MenuArrowBounds(width, height, x, y);
     };
     if (titleQuitOpen.load())

@@ -13,6 +13,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Settings uses the same HD font pages as the game when a font mod replaces them, and Latin menus use the European game's font with its accented letters (#668).
 - Settings can be shown in Spanish, French, German or Italian (System → Settings language); the menu uses the game's own font for them (#669).
 - Button prompts adds Switch, Steam Deck and Keyboard icons, in game, in Settings and on the title screen. Auto picks them for Nintendo pads, the Steam Deck and after a key press; keyboard icons show the bound keys. The artwork is Xelu's free CC0 prompts (#670).
+- Settings opened in a game keeps the game's own header (gold, play time, location) and looks closer to the game's menus: retail text proportions with a black outline, the game's cursor plate and list arrow, and translated Menu and Help labels (#671).
 
 ### 简体中文
 
@@ -21,6 +22,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 字体 Mod 替换字体页面后，设置菜单也使用与游戏相同的高清字体页面；拉丁语系菜单使用欧版游戏带重音字母的字体（#668）。
 - 设置菜单新增西班牙语、法语、德语和意大利语（系统 → 设置界面语言），并使用游戏自带字体显示（#669）。
 - 按键提示新增 Switch、Steam Deck 与键盘图标，游戏内、设置菜单和标题画面均适用。“自动”会在使用任天堂手柄、Steam Deck 或按下键盘时切换；键盘图标显示当前绑定的按键。图标来自 Xelu 的免费 CC0 素材（#670）。
+- 在游戏中打开设置时保留游戏自带的页眉（金钱、游戏时间、地点），外观也更接近游戏菜单：原版文字比例与黑色描边、游戏的光标底板与列表箭头，并翻译 Menu 与 Help 标签（#671）。
 
 ## [v1.0.6](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.6) — 2026-10-19
 

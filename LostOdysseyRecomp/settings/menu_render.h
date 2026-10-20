@@ -160,7 +160,8 @@ struct MenuRect
     size_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 };
 // The list arrow at a layout position, and the output pixels it can cover.
-void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y);
+void DrawMenuArrow(std::vector<uint32_t> &pixels, uint32_t width, uint32_t height, int x, int y,
+                   const menu_assets::Assets *assets = nullptr);
 // The output pixels of the title menu's credit and shortcut legends: with titleHint,
 // RasterizeMenu returns only this rectangle, row by row.
 MenuRect TitleHintBounds(uint32_t width, uint32_t height);

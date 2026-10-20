@@ -241,6 +241,11 @@ bool DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t w
 void PointerClick(float x, float y, bool reverse);
 bool IsOpen();
 bool IsTitleQuitOpen();
+// The menu is drawn over the live game frame, which shows the retail header
+// above MenuGameHeaderBottom (layout pixels): presentation clears the menu's
+// alpha there. Otherwise the menu replaces the frame.
+bool MenuOverGame();
+inline constexpr int MenuGameHeaderBottom = 100;
 // Title menu entry (title_entry.cpp): Y on the idle title menu opens Settings
 // before a game is loaded. The title tick reports whether its menu is idle and
 // takes a fresh press made there, if any.
