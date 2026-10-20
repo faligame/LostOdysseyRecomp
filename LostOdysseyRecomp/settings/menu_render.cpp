@@ -7,6 +7,7 @@
 #include "../apu/test_signal.h"
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <cmath>
 #include <cstring>
 #include <cwchar>
@@ -202,6 +203,62 @@ namespace
         return shaped;
     }
 
+    // Button names drawn as the game's prompt icons inside game-font text:
+    // U+E110.. stand for A, B, X, Y, LB, RB, LT, RT, Back, Start, L3, R3 and
+    // the D-pad (named in text), then the D-pad directions (ButtonIconDpadUp..,
+    // menu_render.h).
+    constexpr wchar_t kButtonIconFirst = 0xE110;
+    constexpr int kNamedButtonIcons = 13, kButtonIconCount = 17;
+    static_assert(settings::ButtonIconDpadUp == kButtonIconFirst + kNamedButtonIcons &&
+                  settings::ButtonIconLeftThumb == kButtonIconFirst + 10 && settings::ButtonIconRightThumb == kButtonIconFirst + 11);
+    // An icon is this many line heights wide with its gap, drawn kButtonIconSize square.
+    constexpr double kButtonIconAdvance = 0.92, kButtonIconSize = 0.82;
+    bool IsButtonIcon(wchar_t c) { return c >= kButtonIconFirst && c < kButtonIconFirst + kButtonIconCount; }
+    // The icon's 36x36 cell in Icon_Page_0 (hid/controller_atlas_glyphs.h).
+    std::array<int, 2> ButtonIconCell(wchar_t c)
+    {
+        static constexpr int cells[kButtonIconCount][2] = {{0, 72}, {36, 72}, {72, 72}, {108, 72}, {0, 0},
+                                                           {36, 0}, {72, 0}, {108, 0}, {108, 36}, {144, 36},
+                                                           {216, 0}, {0, 36}, {72, 36},
+                                                           {180, 36}, {216, 36}, {144, 72}, {180, 72}};
+        const int i = std::clamp(int(c - kButtonIconFirst), 0, kButtonIconCount - 1);
+        return {cells[i][0], cells[i][1]};
+    }
+    // Replaces button names used as buttons ("A: confirm", "LB / RB", "(A)",
+    // "A / B") with icon codes; words that only look like one stay text.
+    std::wstring ButtonText(const std::wstring &value)
+    {
+        static constexpr const wchar_t *names[kNamedButtonIcons] = {L"A", L"B", L"X", L"Y", L"LB", L"RB",
+                                                                   L"LT", L"RT", L"Back", L"Start", L"L3", L"R3",
+                                                                   L"D-pad"};
+        const auto word = [](wchar_t c) { return iswalnum(c) != 0; };
+        std::wstring out;
+        for (size_t i = 0; i < value.size();)
+        {
+            bool replaced = false;
+            if (i == 0 || !word(value[i - 1]))
+                for (int n = kNamedButtonIcons - 1; n >= 0 && !replaced; --n)
+                {
+                    const std::wstring_view name = names[n];
+                    if (value.compare(i, name.size(), name) != 0) continue;
+                    const size_t end = i + name.size();
+                    if (end < value.size() && word(value[end])) continue;
+                    size_t next = end, previous = i;
+                    while (next < value.size() && value[next] == L' ') ++next;
+                    while (previous > 0 && value[previous - 1] == L' ') --previous;
+                    const bool after = next == value.size() || value[next] == L':' || value[next] == L'/' ||
+                                       value[next] == L')' || value[next] == L'：';
+                    const bool before = previous > 0 && (value[previous - 1] == L'/' || value[previous - 1] == L'(');
+                    if (!after && !before) continue;
+                    out += wchar_t(kButtonIconFirst + n);
+                    i = end;
+                    replaced = true;
+                }
+            if (!replaced) out += value[i++];
+        }
+        return out;
+    }
+
     // The game face that draws a whole string: the title face from 32 pt, else
     // the body face, or the Abc face when only it has every character. Null:
     // the host font draws it.
@@ -211,7 +268,8 @@ namespace
         if (!assets || value.empty()) return nullptr;
         const auto covers = [&](const settings::menu_assets::Font &font) {
             return font.height && std::all_of(value.begin(), value.end(), [&](wchar_t c) {
-                return c == L' ' || (creditSeparators && c == L'·') || font.glyphs.contains(uint32_t(c));
+                return c == L' ' || (creditSeparators && c == L'·') || font.glyphs.contains(uint32_t(c)) ||
+                       (IsButtonIcon(c) && !assets->icons.pixels.empty());
             });
         };
         const auto *face = size >= 32 && !assets->title.glyphs.empty() ? &assets->title : &assets->body;
@@ -224,7 +282,8 @@ namespace
     {
         double advance = 0;
         for (const auto c : value)
-            advance += c == L' ' || (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
+            advance += IsButtonIcon(c) ? font.height * kButtonIconAdvance
+                       : c == L' ' || (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
                            ? font.height * 0.3 : int(font.glyphs.at(uint32_t(c)).width) + font.kerning;
         return advance;
     }
@@ -804,24 +863,50 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                      bool bold = false, int alignment = 0 /* 0=left, 1=center, 2=right */,
                      uint32_t edge = MakeColor(255, 39, 40, 40), int minimum = 13, bool prompts = true,
                      bool creditSeparators = false) {
-        const std::wstring value = ArabicVisual(prompts ? PromptText(source, current.playStationPrompts) : source);
-        if (const auto *selectedFont = GameFace(current.assets.get(), value, size, creditSeparators))
+        const auto *assets = current.assets.get();
+        // The game faces have no multiplication sign; an x keeps "4×" in them.
+        std::wstring plain = source;
+        if (assets && !assets->body.glyphs.contains(0xD7) && plain.find(L'×') != std::wstring::npos)
+            std::replace(plain.begin(), plain.end(), L'×', L'x');
+        const std::wstring value = ArabicVisual(prompts ? PromptText(plain, current.playStationPrompts) : plain);
+        // With the game's prompt icons, button names are drawn as icons in the
+        // game face; otherwise (or when a character is still missing) as before.
+        std::wstring drawn = value;
+        const settings::menu_assets::Font *selectedFont = nullptr;
+        if (prompts && assets && !assets->icons.pixels.empty())
+        {
+            std::wstring withIcons = ArabicVisual(ButtonText(plain));
+            if ((selectedFont = GameFace(assets, withIcons, size, creditSeparators))) drawn = std::move(withIcons);
+        }
+        if (!selectedFont) selectedFont = GameFace(assets, value, size, creditSeparators);
+        if (selectedFont)
         {
             const auto &font = *selectedFont;
+            const auto &iconAtlas = current.playStationPrompts && !assets->iconsPlayStation.pixels.empty()
+                                        ? assets->iconsPlayStation : assets->icons;
 #ifdef LO_MENU_RENDER_TRACE
-            LoMenuRenderTrace(value, true);
+            LoMenuRenderTrace(drawn, true);
 #endif
             // Measure spaces the way they are drawn below, or right-aligned
             // and centered text with spaces runs past its box.
-            const double advance = FaceAdvance(font, value, creditSeparators);
-            const double ratio = FaceRatio(font, value, w, h, size, true, creditSeparators);
+            const double advance = FaceAdvance(font, drawn, creditSeparators);
+            const double ratio = FaceRatio(font, drawn, w, h, size, true, creditSeparators);
             double left = x;
             if (alignment == 1) left += (w - advance * ratio) * .5;
             else if (alignment == 2) left += w - advance * ratio;
             const double top = y + (h - font.height * ratio) * .5;
-            for (const auto c : value)
+            for (const auto c : drawn)
             {
                 if (c == L' ') { left += (font.height * 0.3) * ratio; continue; }
+                if (IsButtonIcon(c))
+                {
+                    const double step = font.height * kButtonIconAdvance * ratio, side = font.height * kButtonIconSize * ratio;
+                    const auto cell = ButtonIconCell(c);
+                    sprite(iconAtlas, cell[0], cell[1], 36, 36, left + (step - side) * .5,
+                           top + (font.height * ratio - side) * .5, side, side, color == ink ? 255 : 160);
+                    left += step;
+                    continue;
+                }
                 if (creditSeparators && c == L'·' && !font.glyphs.contains(uint32_t(c)))
                 {
                     // INT's menu faces lack U+00B7. Draw only that separator
@@ -1016,7 +1101,12 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                  false, 0, outline, 12);
             if (!current.titleQuitKey.empty() && !current.titleQuitLabel.empty())
             {
-                if (current.playStationPrompts && current.titleQuitKey == L"Back")
+                // With the game's prompt icons, Back is the controller's own icon.
+                const bool icons = current.assets && !current.assets->icons.pixels.empty();
+                if (icons && current.titleQuitKey == L"Back")
+                    text(kQuitHintX, quitY, kQuitHintKey, kHintHeight, current.titleQuitKey, 18, face, false, 2,
+                         outline, 12);
+                else if (current.playStationPrompts && current.titleQuitKey == L"Back")
                 {
                     // The same three-node Share/Create mark as the guest
                     // controller atlas: Back is not the PlayStation touchpad.
@@ -1390,7 +1480,20 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     int visible = 0;
     for (size_t index = 0; index < current.rows.size(); ++index)
     {
-        const auto &row = current.rows[index];
+        // Rows with icons for word labels show the icons when the atlas is loaded.
+        const auto &stored = current.rows[index];
+        std::optional<MenuRow> iconRow;
+        if ((stored.nameIcon || stored.valueIcon) && current.assets && !current.assets->icons.pixels.empty())
+        {
+            iconRow = stored;
+            if (stored.nameIcon) iconRow->name.assign(1, stored.nameIcon);
+            if (stored.valueIcon)
+            {
+                iconRow->value.assign(1, stored.valueIcon);
+                for (auto &choice : iconRow->choices) choice.assign(1, stored.valueIcon);
+            }
+        }
+        const auto &row = iconRow ? *iconRow : stored;
         if (row.hidden)
             continue;
         const int slot = visible++ - current.scroll;
@@ -1616,10 +1719,15 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
     }
 
     // Understated overflow indicators when rows exceed the visible viewport.
+    // Drawn triangles: neither the game faces nor the host font have ▲ and ▼.
+    auto triangle = [&](int cx, int cy, bool up) {
+        for (int i = 0; i < 7; ++i)
+            line(cx - i, cy + (up ? i : -i), cx + i, cy + (up ? i : -i), muted);
+    };
     if (current.scroll > 0)
-        text( choiceLeft + choiceWidth - 40, rowTop - 24, 40, 20, L"▲", 13, muted, false, 1);
+        triangle(choiceLeft + choiceWidth - 20, rowTop - 20, true);
     if (visible - current.scroll > visibleRows)
-        text( choiceLeft + choiceWidth - 40, 622, 40, 20, L"▼", 13, muted, false, 1);
+        triangle(choiceLeft + choiceWidth - 20, 638, false);
 
     text(65, 652, 52, 43, L"Help", 20, ink, false);
     fill(116, 650, 1094, 45, MakeColor(255, 70, 73, 73));

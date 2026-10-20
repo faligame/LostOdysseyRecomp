@@ -1,10 +1,12 @@
 #include "menu_assets.h"
 #include <modding/image_mod.h>
+#include <hid/controller_atlas_glyphs.h>
 #include <modding/xenos_texture.h>
 #include <gpu/shader/cpx_decode.h>
 #include <lzokay.hpp>
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -335,6 +337,33 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         assets->menu = DecodeTexture(menu, "UI_MAIN_00", menuPath);
         // The UV layout below is the verified 512x1024 common menu atlas.
         Check(assets->menu.width == 512 && assets->menu.height == 1024);
+        try
+        {
+            // The button tiles live in the INT package (hid/controller_atlas_glyphs.h).
+            const auto iconPath = "bin/xenon/loc/int/menu/rpmenurescommon_int.xxx";
+            assets->icons = DecodeTexture(selected == "int" ? menu : index.ReadPackage(disc, "int", "rpmenurescommon"),
+                                          "Icon_Page_0", iconPath);
+            namespace atlas = hid::prompts::atlas;
+            if (assets->icons.width == atlas::Width && assets->icons.height == atlas::Height)
+            {
+                // Decoded pixels are 0xAARRGGBB; the painter and the raster use R, G, B, A bytes.
+                std::vector<uint8_t> rgba(assets->icons.pixels.size() * 4);
+                for (size_t i = 0; i < assets->icons.pixels.size(); ++i)
+                {
+                    const uint32_t p = assets->icons.pixels[i];
+                    rgba[i * 4] = uint8_t(p >> 16); rgba[i * 4 + 1] = uint8_t(p >> 8);
+                    rgba[i * 4 + 2] = uint8_t(p); rgba[i * 4 + 3] = uint8_t(p >> 24);
+                }
+                for (size_t i = 0; i < assets->icons.pixels.size(); ++i)
+                    std::memcpy(&assets->icons.pixels[i], &rgba[i * 4], 4);
+                atlas::PatchPlayStationAtlasRgba(rgba.data(), atlas::Width * 4, rgba.data(), atlas::Width * 4,
+                                                 atlas::Width, atlas::Height);
+                assets->iconsPlayStation = assets->icons;
+                std::memcpy(assets->iconsPlayStation.pixels.data(), rgba.data(), rgba.size());
+            }
+            else assets->icons = {};
+        }
+        catch (...) { assets->icons = {}; /* Button names stay text. */ }
         return assets;
     }
     catch (...) { return {}; }

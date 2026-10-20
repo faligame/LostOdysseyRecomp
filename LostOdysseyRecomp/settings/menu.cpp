@@ -669,6 +669,27 @@ std::wstring InputLabel(int input)
     }
     return L"?";
 }
+// The game's prompt icon for an input whose label is words, 0 otherwise.
+wchar_t InputIcon(int input)
+{
+    switch (input)
+    {
+    case input_map::LeftThumb: return ButtonIconLeftThumb;
+    case input_map::RightThumb: return ButtonIconRightThumb;
+    case input_map::DpadUp: return ButtonIconDpadUp;
+    case input_map::DpadDown: return ButtonIconDpadDown;
+    case input_map::DpadLeft: return ButtonIconDpadLeft;
+    case input_map::DpadRight: return ButtonIconDpadRight;
+    }
+    return 0;
+}
+// InputIcon of a controller source's default input.
+wchar_t SourceIcon(input_map::Source source)
+{
+    for (int i = 0; i < input_map::ControllerInputCount; ++i)
+        if (input_map::DefaultController[i] == source) return InputIcon(i);
+    return 0;
+}
 // A controller source by the Xbox 360 name of its default input; the extra
 // buttons some controllers have by their own names.
 std::wstring SourceLabel(input_map::Source source)
@@ -1358,7 +1379,7 @@ void Publish(uint8_t *base, uint32_t config)
         // The row being captured counts down in place of its binding.
         const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(captureDeadline - MenuNow()).count();
         const auto seconds = std::to_wstring(std::max<long long>(0, (left + 999) / 1000));
-        auto binding = [&](int r, std::wstring value, bool literal) {
+        auto binding = [&](int r, std::wstring value, bool literal, wchar_t valueIcon = 0) {
             bool keyboard = false;
             const int input = ControlsInput(r, keyboard);
             if (r == captureRow)
@@ -1369,10 +1390,13 @@ void Publish(uint8_t *base, uint32_t config)
             }
             Row mapping{InputLabel(input), value, true, {value}, 0};
             mapping.literal = literal;
+            mapping.nameIcon = InputIcon(input);
+            if (r != captureRow) mapping.valueIcon = valueIcon;
             next.rows[size_t(r)] = std::move(mapping);
         };
         for (int i = 0; i < input_map::ControllerInputCount; ++i)
-            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false);
+            binding(ControlsControllerFirst + i, SourceLabel(controlsController[size_t(i)]), false,
+                    SourceIcon(controlsController[size_t(i)]));
         for (int i = 0; i < input_map::KeyboardInputCount; ++i)
             binding(ControlsKeyboardFirst + i, KeyLabel(controlsKeyboard[size_t(i)]),
                     controlsKeyboard[size_t(i)] != input_map::NoKey);

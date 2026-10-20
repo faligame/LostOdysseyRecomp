@@ -28,6 +28,10 @@ struct Assets
 {
     Font body, title, fallback;
     Image menu;
+    // The game's button prompt tiles (Icon_Page_0, 36x36 cells; empty when
+    // missing) and the same atlas with the PlayStation artwork the game uses,
+    // both in the menu raster's byte order (host_ui::PackRgba).
+    Image icons, iconsPlayStation;
     std::string language;
 };
 // Reads selected FPI package extents and optional, validated image overlays.

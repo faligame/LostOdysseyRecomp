@@ -20,6 +20,11 @@ inline constexpr int MenuRowHeight(int tab, bool listPage = false)
 {
     return tab == 3 && !listPage ? 39 : 43;
 }
+// The game's prompt icons for inputs whose labels are words (stick clicks,
+// D-pad directions): MenuRow::nameIcon / valueIcon. Other button names become
+// icons by name in text (menu_render.cpp).
+inline constexpr wchar_t ButtonIconLeftThumb = 0xE11A, ButtonIconRightThumb = 0xE11B, ButtonIconDpadUp = 0xE11D,
+                         ButtonIconDpadDown = 0xE11E, ButtonIconDpadLeft = 0xE11F, ButtonIconDpadRight = 0xE120;
 struct MenuRow
 {
     std::wstring name, value;
@@ -57,6 +62,8 @@ struct MenuRow
     // starts after it. Without an image, iconGlyph is drawn on a dark square.
     std::shared_ptr<const menu_assets::Image> icon;
     std::wstring iconGlyph;
+    // With the game's prompt icons loaded, drawn in place of the name / value.
+    wchar_t nameIcon = 0, valueIcon = 0;
     bool operator==(const MenuRow &) const = default;
 };
 struct MenuSnapshot
