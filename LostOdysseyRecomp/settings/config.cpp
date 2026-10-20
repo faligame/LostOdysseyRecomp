@@ -56,7 +56,7 @@ Config Validate(Config value)
     value.vibrationPercent = std::min(value.vibrationPercent, 100u);
     value.audioMatrixRear = std::clamp((value.audioMatrixRear + 5) / 10 * 10, 90u, 150u);
     value.voiceVolume = std::min(value.voiceVolume, 100u);
-    if (value.buttonPrompts > 2) value.buttonPrompts = 0;
+    if (value.buttonPrompts > 5) value.buttonPrompts = 0;
     if (value.performanceOverlay > 2) value.performanceOverlay = 0;
     value.controllerMap = hid::input_map::ValidController(value.controllerMap);
     value.keyboardMap = hid::input_map::ValidKeyboard(value.keyboardMap);

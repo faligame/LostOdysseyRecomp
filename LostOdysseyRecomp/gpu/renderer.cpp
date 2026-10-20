@@ -66,6 +66,7 @@
 #include <settings/config.h>
 #include <hid/hid.h>
 #include <hid/controller_atlas_glyphs.h>
+#include <hid/glyph_atlases.h>
 #include <modding/texture_mod.h>
 #include "shader/xenos_translator.h"
 #include "shader/dxc_compiler.h"
@@ -487,13 +488,17 @@ namespace gpu::renderer
             bool modReplaceable = false;
             uint32_t modsEpoch = 0;
 
-            // The source remains BC3. Only a verified controller atlas owns an
-            // optional, single-mip RGBA PlayStation child; retirement of the
-            // source also retires its child after the GPU fence.
+            // The source remains BC3. Only a verified controller atlas owns
+            // optional, single-mip RGBA children, one per button icon family
+            // (hid::prompts::Family): the PlayStation repaint (state Ready once
+            // made) and the Switch, Steam Deck and keyboard atlases, each
+            // remade when its hid::glyphs image changes. Retirement of the
+            // source also retires its children after the GPU fence.
             enum class AtlasState : uint8_t { None, Pending, Ready, Failed };
             AtlasState atlasState = AtlasState::None;
             std::vector<uint8_t> atlasPendingRgba;
-            std::unique_ptr<HostTexture> atlasPlayStation;
+            std::array<std::unique_ptr<HostTexture>, hid::prompts::FamilyCount> atlasVariants;
+            std::array<std::shared_ptr<const hid::glyphs::Atlas>, hid::prompts::FamilyCount> atlasVariantImages;
             bool controllerAtlasRecognized = false;
             bool controllerAtlasPlayStationVariant = false;
             controller_atlas::Identity controllerAtlasIdentity = controller_atlas::Identity::Unknown;
@@ -1814,7 +1819,7 @@ namespace gpu::renderer
             uint32_t textureModsEpoch = 0;
             std::unordered_map<uint64_t, ReadyReplacement> replacementsReady;
             uint64_t controllerAtlasFamilyFrame = ~0ull;
-            bool controllerAtlasPlayStationFamily = false;
+            hid::prompts::Family controllerAtlasFamily = hid::prompts::Family::Xbox;
             uint64_t controllerAtlasTraceFrame = ~0ull;
             uint32_t controllerAtlasTraceCount = 0;
             struct ControllerAtlasTraceCandidate {
@@ -8307,6 +8312,48 @@ void main()
                 output->parentExtent = output->hostExtent;
             }
 
+            // The family's atlas (hid/glyph_atlases.h) for this game atlas
+            // (Icon_Page_0 or the font's icon page, which share the grid),
+            // uploaded at its 4x size; texel offsets stay on the original
+            // 256x128 grid (guestWidth). Without one the source stays.
+            void SelectGlyphAtlas(HostTexture& source, hid::prompts::Family family)
+            {
+                const size_t index = size_t(family);
+                auto image = hid::glyphs::FamilyAtlas(family);
+                auto& slot = source.atlasVariants[index];
+                if (image == source.atlasVariantImages[index]) return;
+                if (slot) Gpu().retiredTextures.push_back(std::move(slot));
+                source.atlasVariantImages[index] = image;
+                if (!image) return;
+                auto variant = std::make_unique<HostTexture>();
+                variant->format = RenderFormat::R8G8B8A8_UNORM;
+                variant->width = variant->bindingWidth = image->width;
+                variant->height = variant->bindingHeight = image->height;
+                variant->guestWidth = controller_atlas::Width;
+                variant->guestHeight = controller_atlas::Height;
+                variant->controllerAtlasRecognized = true;
+                variant->controllerAtlasIdentity = source.controllerAtlasIdentity;
+                variant->texture = device->createTexture(RenderTextureDesc::Texture2D(
+                    variant->width, variant->height, 1, variant->format));
+                // Upload may Flush/Begin and change the current slot, list and
+                // ring. Do not retain references to any of them across it.
+                const uint64_t offset = variant->texture ? Upload(image->rgba.data(), image->rgba.size(), 512) : UINT64_MAX;
+                if (offset == UINT64_MAX) {
+                    source.atlasVariantImages[index].reset();
+                    if (!video::GpuWorkStopped())
+                        LOG_WARNING("renderer: controller atlas glyph upload unavailable; using original BC3");
+                    return;
+                }
+                Transition(*variant, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(variant->texture.get()),
+                    RenderTextureCopyLocation::PlacedFootprint(uploadRing, variant->format,
+                        variant->width, variant->height, 1, variant->width, offset));
+                Transition(*variant, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                slot = std::move(variant);
+                LOG_INFO("renderer: {} atlas for {} ({}x{})", hid::prompts::FamilyName(family),
+                    controller_atlas::Name(source.controllerAtlasIdentity), image->width, image->height);
+            }
+
             HostTexture* SelectControllerAtlas(HostTexture* source, binding::Texture* bindingInfo)
             {
                 if (!source) return nullptr;
@@ -8315,10 +8362,14 @@ void main()
                     return source;
                 }
                 if (controllerAtlasFamilyFrame != frame) {
-                    controllerAtlasPlayStationFamily = hid::UsesPlayStationPrompts();
+                    controllerAtlasFamily = hid::prompts::Family(hid::PromptFamily());
                     controllerAtlasFamilyFrame = frame;
                 }
-                if (controllerAtlasPlayStationFamily && source->atlasState == HostTexture::AtlasState::Pending) {
+                using Family = hid::prompts::Family;
+                if (controllerAtlasFamily != Family::Xbox && controllerAtlasFamily != Family::PlayStation)
+                    SelectGlyphAtlas(*source, controllerAtlasFamily);
+                const bool playStation = controllerAtlasFamily == Family::PlayStation;
+                if (playStation && source->atlasState == HostTexture::AtlasState::Pending) {
                     auto variant = std::make_unique<HostTexture>();
                     variant->format = RenderFormat::R8G8B8A8_UNORM;
                     variant->width = variant->bindingWidth = controller_atlas::Width;
@@ -8347,7 +8398,7 @@ void main()
                             RenderTextureCopyLocation::PlacedFootprint(uploadRing, variant->format,
                                 variant->width, variant->height, 1, variant->width, offset));
                         Transition(*variant, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                        source->atlasPlayStation = std::move(variant);
+                        source->atlasVariants[size_t(Family::PlayStation)] = std::move(variant);
                         source->atlasState = HostTexture::AtlasState::Ready;
                     } else {
                         source->atlasState = HostTexture::AtlasState::Failed;
@@ -8362,8 +8413,8 @@ void main()
                 // record against a stopped list. Keep source ownership intact;
                 // the caller's PlanSuppressed path stops this draw.
                 if (video::GpuWorkStopped()) return nullptr;
-                HostTexture* selected = controllerAtlasPlayStationFamily && source->atlasPlayStation
-                    ? source->atlasPlayStation.get() : source;
+                const auto& variant = source->atlasVariants[size_t(controllerAtlasFamily)];
+                HostTexture* selected = controllerAtlasFamily != Family::Xbox && variant ? variant.get() : source;
                 DescribeBindingTexture(bindingInfo, *selected, binding::TextureKind::GuestUpload);
                 return selected;
             }

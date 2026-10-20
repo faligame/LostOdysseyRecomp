@@ -886,8 +886,10 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
         if (selectedFont)
         {
             const auto &font = *selectedFont;
-            const auto &iconAtlas = current.playStationPrompts && !assets->iconsPlayStation.pixels.empty()
+            const auto &iconAtlas = current.promptIcons ? *current.promptIcons
+                                    : current.playStationPrompts && !assets->iconsPlayStation.pixels.empty()
                                         ? assets->iconsPlayStation : assets->icons;
+            const int iconScale = int(std::max(1u, iconAtlas.scale));
 #ifdef LO_MENU_RENDER_TRACE
             LoMenuRenderTrace(drawn, true);
 #endif
@@ -906,7 +908,8 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                 {
                     const double step = font.height * kButtonIconAdvance * ratio, side = font.height * kButtonIconSize * ratio;
                     const auto cell = ButtonIconCell(c);
-                    sprite(iconAtlas, cell[0], cell[1], 36, 36, left + (step - side) * .5,
+                    sprite(iconAtlas, cell[0] * iconScale, cell[1] * iconScale, 36 * iconScale, 36 * iconScale,
+                           left + (step - side) * .5,
                            top + (font.height * ratio - side) * .5, side, side, color == ink ? 255 : 160);
                     left += step;
                     continue;
@@ -1107,7 +1110,7 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                  false, 0, outline, 12);
             if (!current.titleQuitKey.empty() && !current.titleQuitLabel.empty())
             {
-                // With the game's prompt icons, Back is the controller's own icon.
+                // With the game's prompt icons, Back is the family's own icon.
                 const bool icons = current.assets && !current.assets->icons.pixels.empty();
                 if (icons && current.titleQuitKey == L"Back")
                     text(kQuitHintX, quitY, kQuitHintKey, kHintHeight, current.titleQuitKey, 18, face, false, 2,

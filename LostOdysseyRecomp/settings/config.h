@@ -163,7 +163,9 @@ struct Config
     uint32_t frameGenerationMultiplier = 2; // Requested total output frames per rendered frame.
     uint32_t frameGenerationTargetFps = 0; // Dynamic mode: 0 asks the SDK to use the display rate.
     uint32_t vibrationPercent = 100; // Controller rumble strength; 0 Off, 100 retail. Applied live.
-    uint32_t buttonPrompts = 0; // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation. Applied live.
+    // Button icons: 0 Auto (last active controller), 1 Xbox, 2 PlayStation, 3 Switch,
+    // 4 Steam Deck, 5 keyboard. Applied live.
+    uint32_t buttonPrompts = 0;
     // Gameplay → Controls: the controller button and the key for each Xbox 360
     // input (hid/input_map.h). Applied live.
     hid::input_map::ControllerMap controllerMap = hid::input_map::DefaultController;

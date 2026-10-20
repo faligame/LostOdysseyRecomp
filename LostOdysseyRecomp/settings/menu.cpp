@@ -25,6 +25,7 @@
 #include <apu/audio.h>
 #include <updater/shader_pack_download.h>
 #include <hid/hid.h>
+#include <hid/glyph_atlases.h>
 #if !LO_PLATFORM_ANDROID && !defined(__SWITCH__) && !defined(__NX__) && (defined(_WIN32) || defined(__linux__) || defined(__APPLE__))
 #include <discord/presence.h>
 #endif
@@ -1366,7 +1367,8 @@ void Publish(uint8_t *base, uint32_t config)
             : Tr(L"A: change     Start: save     B: back", L"A：變更     Start：儲存     B：返回");
         next.rows.resize(size_t(ControlsRowCount));
         next.rows[ControlsPromptRow] = makeChoices(L"Button prompts", L"按鍵提示",
-            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation"}, std::min(edit.buttonPrompts, 2u));
+            {Tr(L"Auto", L"自動"), L"Xbox", L"PlayStation", L"Switch", L"Steam Deck", Tr(L"Keyboard", L"鍵盤")},
+            std::min(edit.buttonPrompts, 5u));
         next.rows[ControlsVibrationRow] = {Tr(L"Vibration", L"震動"), std::to_wstring(edit.vibrationPercent) + L"%", true, {}, 0,
                                            int(std::min(edit.vibrationPercent, 100u))};
         auto title = [&](const wchar_t *en, const wchar_t *zh) {
@@ -3490,7 +3492,7 @@ PPC_FUNC(sub_822F19B0)
         else if (delta && controlsFocus == ControlsPromptRow)
         {
             // Host setting: applied and saved at once, like Vibration.
-            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 2u)) + 3 + delta) % 3);
+            const auto style = uint32_t((int(std::min(edit.buttonPrompts, 5u)) + 6 + delta) % 6);
             edit.buttonPrompts = style;
             Config saved = GetConfig();
             saved.buttonPrompts = style;
@@ -4205,13 +4207,36 @@ void settings::MarkTitleEntry()
     titleEntry = true;
 }
 
+std::shared_ptr<const settings::menu_assets::Image> settings::PromptIcons(int family)
+{
+    static std::shared_ptr<const hid::glyphs::Atlas> sources[hid::prompts::FamilyCount];
+    static std::shared_ptr<const menu_assets::Image> images[hid::prompts::FamilyCount];
+    if (family < 0 || family >= hid::prompts::FamilyCount) return {};
+    auto source = hid::glyphs::FamilyAtlas(hid::prompts::Family(family));
+    if (!source) return {};
+    if (source != sources[family])
+    {
+        // RGBA bytes are the raster's order (host_ui::PackRgba) on this little-endian host.
+        auto image = std::make_shared<menu_assets::Image>();
+        image->width = source->width;
+        image->height = source->height;
+        image->scale = source->width / 256;
+        image->pixels.resize(size_t(source->width) * source->height);
+        std::memcpy(image->pixels.data(), source->rgba.data(), image->pixels.size() * 4);
+        images[family] = std::move(image);
+        sources[family] = std::move(source);
+    }
+    return images[family];
+}
+
 bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, uint32_t width, uint32_t height)
 {
     // This overlay has its own cache and motion. DrawMenu is a full-screen
     // replacement for the retail Settings task; the title must stay underneath.
     static uint64_t cachedRevision = ~uint64_t{}, outputRevision = 0;
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, shown = false, closing = false;
+    static int cachedPromptFamily = -1;
+    static bool shown = false, closing = false;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
     static MenuTransition motion;
     static std::vector<uint32_t> raster;
@@ -4265,10 +4290,12 @@ bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, 
         current = snapshot;
     }
     current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
     current.assets = menu_assets::Cached(FileSystem::GetGameRoot(), current.language);
     const bool opened = !shown;
     if (opened || closing || !compatible || cachedRevision != current.revision ||
-        cachedPlayStation != current.playStationPrompts || cachedAssets != current.assets)
+        cachedPromptFamily != current.promptFamily || cachedAssets != current.assets)
     {
         if (!RasterizeMenu(current, width, height, raster))
             return false;
@@ -4289,7 +4316,7 @@ bool settings::DrawTitleQuit(std::vector<uint32_t> &pixels, uint64_t &revision, 
         cachedRevision = current.revision;
         cachedWidth = width;
         cachedHeight = height;
-        cachedPlayStation = current.playStationPrompts;
+        cachedPromptFamily = current.promptFamily;
         cachedAssets = current.assets;
         revision = ++outputRevision;
         return true;
@@ -4304,7 +4331,8 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     // This cache belongs to the sole presentation thread. Dimensions must be
     // checked independently: portrait and landscape buffers can have equal area.
     static uint32_t cachedWidth = 0, cachedHeight = 0;
-    static bool cachedPlayStation = false, cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
+    static int cachedPromptFamily = -1;
+    static bool cachedPreviewPage = false, cachedDialog = false, shown = false, closing = false;
     static int cachedTab = -1;
     static std::wstring cachedPage;
     static std::shared_ptr<const menu_assets::Assets> cachedAssets;
@@ -4405,9 +4433,11 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     };
     // Input style can change without a guest menu tick (hot-plug or keyboard).
     current.playStationPrompts = hid::UsesPlayStationPrompts();
+    current.promptFamily = hid::PromptFamily();
+    current.promptIcons = PromptIcons(current.promptFamily);
     const bool opened = !shown;
     if (!opened && revision == current.revision && cachedWidth == width && cachedHeight == height &&
-        cachedPlayStation == current.playStationPrompts && !pixels.empty())
+        cachedPromptFamily == current.promptFamily && !pixels.empty())
     {
         const auto now = MenuNow();
         motion.Advance(pixels, now);
@@ -4439,7 +4469,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
                 motion.StartCascade(pixels, raster, width, now, MenuOpenCascade(width, height, current.tab, !current.pageTitle.empty()));
     }
     else if (!opened && cachedWidth == width && cachedHeight == height &&
-             cachedPlayStation == current.playStationPrompts && !previewPage && !cachedPreviewPage)
+             cachedPromptFamily == current.promptFamily && !previewPage && !cachedPreviewPage)
     {
         // Settle this frame's image first. The arrow goes into the outgoing
         // image only when the new raster draws it itself (under a prompt).
@@ -4474,7 +4504,7 @@ bool settings::DrawMenu(std::vector<uint32_t> &pixels, uint64_t &revision, uint3
     shown = true;
     cachedWidth = width;
     cachedHeight = height;
-    cachedPlayStation = current.playStationPrompts;
+    cachedPromptFamily = current.promptFamily;
     cachedPreviewPage = previewPage;
     cachedDialog = dialog;
     cachedTab = current.tab;

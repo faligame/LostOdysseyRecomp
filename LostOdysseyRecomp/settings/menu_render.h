@@ -74,6 +74,10 @@ struct MenuSnapshot
     int scroll = 0;
     uint32_t language = 0;
     bool playStationPrompts = false;
+    // hid::prompts::Family of the button icons, and for Switch, Steam Deck and
+    // keyboard their atlas (hid/glyph_atlases.h) in the raster's byte order.
+    int promptFamily = 0;
+    std::shared_ptr<const menu_assets::Image> promptIcons;
     // B confirms and A goes back (the game's swapped button setting).
     bool confirmB = false;
     std::vector<MenuRow> rows;
@@ -146,6 +150,9 @@ struct MenuArrow
 // Render glyphs at output resolution, fitting the existing 1280x720 logical layout.
 // With arrow set, the list arrow is left out and reported there, for presentation
 // to move it; under a prompt it stays in the raster, dimmed with the page.
+// The Switch, Steam Deck or keyboard icon atlas for menu text, or null (Xbox
+// and PlayStation use the game's atlas). Presentation thread (menu.cpp).
+std::shared_ptr<const menu_assets::Image> PromptIcons(int family);
 bool RasterizeMenu(const MenuSnapshot &snapshot, uint32_t width, uint32_t height,
                    std::vector<uint32_t> &pixels, MenuArrow *arrow = nullptr);
 struct MenuRect
