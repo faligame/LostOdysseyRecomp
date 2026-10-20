@@ -15,15 +15,30 @@ struct Image
     uint32_t width = 0, height = 0;
     // Straight-alpha BGRA bytes, matching the Win32 menu DIB.
     std::vector<uint32_t> pixels;
+    // Pixels per original texel: a mod's HD font page is 2, 4 or 8.
+    uint32_t scale = 1;
 };
+// Glyph rectangles are in original texels; multiply by the page scale.
 struct Glyph { uint32_t x = 0, y = 0, width = 0, height = 0, page = 0; };
 struct Font
 {
     std::unordered_map<uint32_t, Glyph> glyphs;
     std::vector<Image> pages;
+    // With HD pages, the same pages at half their size, for small text.
+    std::vector<Image> smallPages;
     int kerning = 0;
     uint32_t height = 0;
 };
+// The page to sample for a glyph drawn at `outputPerTexel` output pixels per
+// original texel: the half-size HD page while it is still as sharp as the
+// output, otherwise the full page.
+inline const Image &GlyphPage(const Font &font, const Glyph &g, double outputPerTexel)
+{
+    if (g.page < font.smallPages.size() && !font.smallPages[g.page].pixels.empty() &&
+        font.smallPages[g.page].scale >= outputPerTexel)
+        return font.smallPages[g.page];
+    return font.pages[g.page];
+}
 struct Assets
 {
     Font body, title, fallback;

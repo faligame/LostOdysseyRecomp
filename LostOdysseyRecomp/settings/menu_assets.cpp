@@ -1,5 +1,7 @@
 #include "menu_assets.h"
 #include <modding/image_mod.h>
+#include <modding/texture_mod.h>
+#include <xxhash.h>
 #include <hid/controller_atlas_glyphs.h>
 #include <modding/xenos_texture.h>
 #include <gpu/shader/cpx_decode.h>
@@ -115,7 +117,26 @@ struct Package
         throw std::runtime_error("menu property count");
     }
 };
-Image Texture(const Package &package, const Export &e, std::string_view packagePath)
+// A mod's HD copy of a DXT5 font page (overlay/textures/fp-<hash>.lotex2, the
+// texture the game itself draws), found by the renderer's fingerprint of its
+// base level. Its first two levels become the page and its half-size copy.
+bool HdFontPage(uint64_t fingerprint, uint32_t width, uint32_t height, Image &page, Image *halfPage)
+{
+    constexpr uint32_t Dxt45 = 20; // k_DXT4_5, as the renderer records it
+    const auto data = modding::ReadTextureReplacement(fingerprint, Dxt45, width, height, 64ull << 20);
+    if (!data || data->type != 1 || data->scale < 2 || data->levels.size() < 2) return false;
+    auto convert = [](const std::vector<uint8_t> &rgba, uint32_t w, uint32_t h, uint32_t scale) {
+        Image image{w, h, std::vector<uint32_t>(size_t(w) * h), scale};
+        for (size_t i = 0; i < image.pixels.size(); ++i)
+            image.pixels[i] = uint32_t(rgba[i * 4 + 3]) << 24 | uint32_t(rgba[i * 4]) << 16 |
+                              uint32_t(rgba[i * 4 + 1]) << 8 | rgba[i * 4 + 2];
+        return image;
+    };
+    page = convert(data->levels[0], data->width, data->height, data->scale);
+    if (halfPage) *halfPage = convert(data->levels[1], data->width / 2, data->height / 2, data->scale / 2);
+    return true;
+}
+Image Texture(const Package &package, const Export &e, std::string_view packagePath, Image *halfPage = nullptr)
 {
     auto object = package.Read(e); auto r = object.native;
     const auto width = object.integers.at("SizeX"), height = object.integers.at("SizeY");
@@ -157,6 +178,9 @@ Image Texture(const Package &package, const Export &e, std::string_view packageP
     }
     Check(r.U32() == uint32_t(width) && r.U32() == uint32_t(height));
     Image image{uint32_t(width), uint32_t(height), std::vector<uint32_t>(size_t(width) * height)};
+    // The swapped blocks in row order also give the renderer's fingerprint.
+    XXH3_state_t *fingerprint = halfPage ? XXH3_createState() : nullptr;
+    if (fingerprint) XXH3_64bits_reset(fingerprint);
     for (uint32_t by = 0; by < uint32_t(height) / 4; ++by)
         for (uint32_t bx = 0; bx < uint32_t(width) / 4; ++bx)
         {
@@ -165,11 +189,19 @@ Image Texture(const Package &package, const Export &e, std::string_view packageP
             Check(address <= raw.size() && 16 <= raw.size() - address);
             uint8_t block[16];
             for (unsigned i = 0; i < 16; ++i) block[i] = raw[address + (i ^ 1)];
+            if (fingerprint) XXH3_64bits_update(fingerprint, block, sizeof(block));
             uint32_t texels[16];
             modding::xenos_texture::DecodeBcBlock(block, 3, texels);
             for (unsigned i = 0; i < 16; ++i)
                 image.pixels[size_t(by * 4 + i / 4) * image.width + bx * 4 + i % 4] = texels[i];
         }
+    if (fingerprint)
+    {
+        const uint64_t hash = XXH3_64bits_digest(fingerprint);
+        XXH3_freeState(fingerprint);
+        Image page;
+        if (HdFontPage(hash, uint32_t(width), uint32_t(height), page, halfPage)) return page;
+    }
     return image;
 }
 
@@ -260,6 +292,10 @@ struct Index
             }
         }
     }
+    bool HasPackage(const std::string &language, const char *family) const
+    {
+        return files.contains("bin\\xenon\\loc\\" + language + "\\menu\\" + family + "_" + language + ".xxx");
+    }
     std::vector<uint8_t> ReadPackage(const std::filesystem::path &disc, const std::string &language, const char *family) const
     {
         const auto path = "bin\\xenon\\loc\\" + language + "\\menu\\" + family + "_" + language + ".xxx";
@@ -300,13 +336,19 @@ Font DecodeFont(std::span<const uint8_t> bytes, const std::string &name, std::st
     for (const auto ref : refs)
     {
         const auto &page = package.exports[ref - 1]; Check(page.outer == int32_t(&e - package.exports.data() + 1));
-        auto image = Texture(package, page, packagePath); totalPixels += image.pixels.size(); Check(totalPixels <= 16 * 1024 * 1024);
+        Image halfPage;
+        auto image = Texture(package, page, packagePath, packagePath.empty() ? nullptr : &halfPage);
+        // The budget counts original texels; an HD page is its mod's choice.
+        totalPixels += image.pixels.size() / (image.scale * image.scale); Check(totalPixels <= 16 * 1024 * 1024);
+        if (image.scale > 1) font.smallPages.resize(font.pages.size() + 1);
+        if (image.scale > 1) font.smallPages.back() = std::move(halfPage);
         font.pages.push_back(std::move(image));
     }
     for (const auto &[cp, g] : font.glyphs)
     {
         Check(g.page < font.pages.size()); const auto &image = font.pages[g.page];
-        Check(g.width && g.height && g.x < image.width && g.y < image.height && g.width <= image.width - g.x && g.height <= image.height - g.y);
+        const uint32_t width = image.width / image.scale, height = image.height / image.scale;
+        Check(g.width && g.height && g.x < width && g.y < height && g.width <= width - g.x && g.height <= height - g.y);
         Check(int(g.width) + font.kerning > 0); font.height = std::max(font.height, g.height);
     }
     return font;
@@ -326,8 +368,14 @@ std::shared_ptr<const Assets> Load(const std::filesystem::path &gameRoot, uint32
         Index index(disc / "LO.fpi");
         constexpr const char *languages[] = {"int", "chi", "jpn", "kor", "sch"};
         const std::string selected = languages[language < std::size(languages) ? language : 0];
-        const auto commonPath = "bin/xenon/loc/" + selected + "/menu/rpfontscommon_" + selected + ".xxx";
-        auto common = index.ReadPackage(disc, selected, "rpfontscommon");
+        // The European game draws every Latin language with the deu fonts,
+        // which have the accented letters; HD font mods replace those pages.
+        std::string fontLanguage = selected;
+        if (language == 0)
+            for (const char *candidate : {"deu", "int"})
+                if (index.HasPackage(candidate, "rpfontscommon")) { fontLanguage = candidate; break; }
+        const auto commonPath = "bin/xenon/loc/" + fontLanguage + "/menu/rpfontscommon_" + fontLanguage + ".xxx";
+        auto common = index.ReadPackage(disc, fontLanguage, "rpfontscommon");
         auto assets = std::make_shared<Assets>(); assets->language = selected;
         assets->body = DecodeFont(common, "Maru23", commonPath);
         try { assets->title = DecodeFont(common, "LocTit1", commonPath); } catch (...) { /* Body face remains available. */ }

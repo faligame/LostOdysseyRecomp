@@ -920,7 +920,9 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                     continue;
                 }
                 const auto &g = font.glyphs.at(uint32_t(c));
-                sprite(font.pages[g.page], int(g.x), int(g.y), int(g.width), int(g.height),
+                const auto &page = settings::menu_assets::GlyphPage(font, g, ratio * scale);
+                const int s = int(page.scale);
+                sprite(page, int(g.x) * s, int(g.y) * s, int(g.width) * s, int(g.height) * s,
                        left, top, g.width * ratio, g.height * ratio, 255, false, color, edge);
                 left += (int(g.width) + font.kerning) * ratio;
             }

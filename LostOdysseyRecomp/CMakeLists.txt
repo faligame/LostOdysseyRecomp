@@ -840,7 +840,7 @@ if(WIN32)
     target_compile_features(LoMenuRenderTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuRenderTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuRenderTest PRIVATE NOMINMAX LO_MENU_RENDER_TRACE)
-    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo)
+    target_link_libraries(LoMenuRenderTest PRIVATE user32 gdi32 lo_menu_lzo xxHash::xxhash)
 
     add_executable(LoMenuFlowTest EXCLUDE_FROM_ALL
         ${CMAKE_SOURCE_DIR}/tools/tests/menu_flow_test.cpp
@@ -850,7 +850,7 @@ if(WIN32)
     target_compile_features(LoMenuFlowTest PRIVATE cxx_std_20)
     target_compile_options(LoMenuFlowTest PRIVATE /utf-8)
     target_compile_definitions(LoMenuFlowTest PRIVATE NOMINMAX LO_GPU_PLUME LO_ENABLE_D3D12_FG FRAMEGEN_WITH_DLSS FRAMEGEN_WITH_FSR)
-    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt)
+    target_link_libraries(LoMenuFlowTest PRIVATE user32 gdi32 lo_menu_lzo fmt::fmt xxHash::xxhash)
 endif()
 
 if(LO_BUILD_GPU)
