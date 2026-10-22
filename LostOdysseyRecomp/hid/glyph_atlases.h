@@ -1,5 +1,5 @@
 #pragma once
-#include "controller_prompts.h"
+#include "prompt_family.h"
 #include <cstdint>
 #include <memory>
 #include <vector>

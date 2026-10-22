@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include "controller_glyphs.h"
+#include "prompt_family.h"
 #include <algorithm>
 #include <cstdint>
 #include <vector>
@@ -14,16 +15,6 @@ inline bool IsPlayStation(SDL_GamepadType type)
            type == SDL_GAMEPAD_TYPE_PS5;
 }
 
-// The button icons shown: the game's own (Xbox), its PlayStation repaint, or
-// the built-in Switch, Steam Deck or keyboard atlases (hid/glyph_atlases.h).
-// The numbers are the button_prompts setting minus one (0 is Auto).
-enum class Family : uint8_t { Xbox, PlayStation, Switch, SteamDeck, Keyboard };
-inline constexpr int FamilyCount = 5;
-inline const char *FamilyName(Family family)
-{
-    constexpr const char *names[FamilyCount] = {"Xbox", "PlayStation", "Switch", "Steam Deck", "keyboard"};
-    return names[size_t(family) < FamilyCount ? size_t(family) : 0];
-}
 inline Family FamilyOf(SDL_GamepadType type, uint16_t vendor, uint16_t product)
 {
     if (IsPlayStation(type)) return Family::PlayStation;
